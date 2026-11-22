@@ -810,7 +810,7 @@ export function useVoiceRoom(options: {
         video: {
           width: { ideal: preset.width, max: preset.width },
           height: { ideal: preset.height, max: preset.height },
-          frameRate: { min: opts.fps >= 60 ? 30 : 15, ideal: opts.fps, max: opts.fps },
+          frameRate: { ideal: opts.fps, max: opts.fps },
         },
         audio: opts.includeSystemAudio
           ? ({
