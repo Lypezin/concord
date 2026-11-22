@@ -2,9 +2,35 @@ import crypto from 'node:crypto';
 import fsSync from 'node:fs';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import type { DatabaseSync } from 'node:sqlite';
 import type { FastifyInstance } from 'fastify';
 import { isImageMime, toAttachment, type AttachmentRow } from '../db.js';
 import type { RouteContext } from './helpers.js';
+
+const ORPHAN_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+export function cleanupOrphanUploads(db: DatabaseSync, uploadsDir: string): void {
+  try {
+    const cutoff = new Date(Date.now() - ORPHAN_MAX_AGE_MS).toISOString();
+    const rows = db
+      .prepare('SELECT id, filename FROM attachments WHERE message_id IS NULL AND created_at < ?')
+      .all(cutoff) as Array<{ id: string; filename: string }>;
+
+    if (rows.length === 0) return;
+
+    const deleteStmt = db.prepare('DELETE FROM attachments WHERE id = ?');
+    for (const row of rows) {
+      deleteStmt.run(row.id);
+      try {
+        fsSync.unlinkSync(path.join(uploadsDir, row.filename));
+      } catch {
+        // ignore missing file
+      }
+    }
+  } catch {
+    // non-fatal startup cleanup
+  }
+}
 
 const MAX_FILE_SIZE_BYTES = 15 * 1024 * 1024; // 15 MB
 const SAFE_FILENAME_RE = /^[a-f0-9]{32}(\.[a-z0-9]{1,8})?$/i;
@@ -148,5 +174,29 @@ export function registerUploadRoutes(fastify: FastifyInstance, ctx: RouteContext
     }
 
     return reply.send(fsSync.createReadStream(filePath));
+  });
+
+  fastify.delete('/api/uploads/:id', async (req, reply) => {
+    const user = auth.requireAuth(req, reply);
+    if (!user) return;
+
+    const { id } = req.params as { id: string };
+    const row = db.prepare('SELECT * FROM attachments WHERE id = ?').get(id) as unknown as
+      | AttachmentRow
+      | undefined;
+
+    if (!row) {
+      return reply.code(404).send({ error: 'Anexo não encontrado.' });
+    }
+    if (row.uploader_id !== user.id) {
+      return reply.code(403).send({ error: 'Você só pode remover seus próprios anexos.' });
+    }
+    if (row.message_id !== null) {
+      return reply.code(400).send({ error: 'Este anexo já está vinculado a uma mensagem.' });
+    }
+
+    db.prepare('DELETE FROM attachments WHERE id = ?').run(id);
+    await fs.unlink(path.join(config.uploadsDir, row.filename)).catch(() => undefined);
+    return reply.send({ ok: true });
   });
 }

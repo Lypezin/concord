@@ -26,6 +26,7 @@ export interface RealtimeHub {
   emitChannelUpdated: (channel: Channel) => void;
   emitChannelDeleted: (channelId: string) => void;
   emitUserJoined: (user: UserPublic) => void;
+  emitUserUpdated: (user: UserPublic) => void;
   close: () => Promise<void>;
 }
 
@@ -241,6 +242,9 @@ export function createRealtime(
     },
     emitUserJoined(user) {
       io.emit('user:joined', user);
+    },
+    emitUserUpdated(user) {
+      io.emit('user:updated', user);
     },
     async close() {
       for (const channelTypers of typingState.values()) {

@@ -84,6 +84,11 @@ export const voiceTokenSchema = z.object({
   channelId: z.string().min(1, 'Canal de voz inválido'),
 });
 
+export const updateProfileSchema = z.object({
+  displayName: displayNameSchema,
+  avatarColor: z.string().regex(/^#[0-9a-fA-F]{6}$/, 'Cor de avatar inválida'),
+});
+
 export type SetupAdminInput = z.infer<typeof setupAdminSchema>;
 export type LoginInput = z.infer<typeof loginSchema>;
 export type RegisterInput = z.infer<typeof registerSchema>;
@@ -94,3 +99,4 @@ export type EditMessageInput = z.infer<typeof editMessageSchema>;
 export type ToggleReactionInput = z.infer<typeof toggleReactionSchema>;
 export type CreateInviteInput = z.infer<typeof createInviteSchema>;
 export type VoiceTokenInput = z.infer<typeof voiceTokenSchema>;
+export type UpdateProfileInput = z.infer<typeof updateProfileSchema>;

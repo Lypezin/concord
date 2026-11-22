@@ -27,7 +27,20 @@ jobs:
       - name: Typecheck and Build
         run: npm run typecheck && npm run build
 
-      - name: Build and Publish Windows Installer
+      - name: Build Windows NSIS Installer
+        run: npm run dist:win
+
+      - name: Publish GitHub Release
+        shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx --workspace=@concord/desktop electron-builder --win nsis --publish always
+        run: |
+          $releaseDir = "apps/desktop/release"
+          $exe = Get-ChildItem -Path $releaseDir -Filter "Concord-Setup-*.exe" | Where-Object { $_.Name -notlike "*uninstaller*" } | Select-Object -First 1
+          $blockmap = Get-ChildItem -Path $releaseDir -Filter "Concord-Setup-*.exe.blockmap" | Select-Object -First 1
+          $yml = Get-Item -Path (Join-Path $releaseDir "latest.yml") -ErrorAction SilentlyContinue
+          if (-not $exe -or -not $blockmap -or -not $yml) {
+            throw "Artefatos esperados nao encontrados em $releaseDir"
+          }
+          $tag = "${{ github.ref_name }}"
+          gh release create "$tag" $exe.FullName $blockmap.FullName $yml.FullName --title "Concord $tag" --generate-notes

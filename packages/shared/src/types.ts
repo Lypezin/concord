@@ -119,4 +119,5 @@ export interface ServerToClientEvents {
   'message:updated': (message: Message) => void;
   'message:deleted': (payload: { channelId: string; messageId: string }) => void;
   'user:joined': (user: UserPublic) => void;
+  'user:updated': (user: UserPublic) => void;
 }

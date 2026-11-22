@@ -62,10 +62,19 @@ export async function getTailscaleStatus(): Promise<TailscaleStatus> {
   });
 }
 
+function formatPsArgument(arg: string): string {
+  const escaped = arg.replace(/'/g, "''");
+  if (arg.includes(' ')) {
+    const doubleQuoted = arg.replace(/"/g, '\\"').replace(/'/g, "''");
+    return `'"${doubleQuoted}"'`;
+  }
+  return `'${escaped}'`;
+}
+
 function runElevatedProcess(filePath: string, args: string[]): Promise<number> {
   return new Promise((resolve, reject) => {
     const escapedExe = filePath.replace(/'/g, "''");
-    const escapedArgs = args.map((a) => `'${a.replace(/'/g, "''")}'`).join(',');
+    const escapedArgs = args.map(formatPsArgument).join(',');
     const psScript = `$p = Start-Process -FilePath '${escapedExe}' -ArgumentList @(${escapedArgs}) -Verb RunAs -Wait -PassThru; exit $p.ExitCode`;
 
     execFile(
@@ -81,7 +90,12 @@ function runElevatedProcess(filePath: string, args: string[]): Promise<number> {
             resolve(code);
             return;
           }
-          reject(new Error(stderr?.trim() || error.message || 'Operação cancelada ou recusada.'));
+          const detail = stderr?.trim() || error.message || '';
+          if (/canceled by the user|cancelada pelo usu|The operation was canceled/i.test(detail)) {
+            reject(new Error('Operação cancelada pelo usuário ou permissão negada.'));
+            return;
+          }
+          reject(new Error(detail || 'Operação cancelada pelo usuário ou permissão negada.'));
           return;
         }
         resolve(0);

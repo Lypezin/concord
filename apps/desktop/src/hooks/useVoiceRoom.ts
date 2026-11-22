@@ -3,7 +3,6 @@ import {
   AudioPresets,
   createLocalAudioTrack,
   LocalAudioTrack,
-  LocalTrack,
   LocalVideoTrack,
   RemoteParticipant,
   Room,
@@ -69,8 +68,13 @@ export function useVoiceRoom(options: {
 
   const [settings, setSettings] = useState<VoiceAudioSettings>(() => loadVoiceSettings());
   const [connectedChannelId, setConnectedChannelId] = useState<string | null>(null);
+  const [connectedAt, setConnectedAt] = useState<number | null>(null);
   const [voiceState, setVoiceState] = useState<VoiceConnectionState>('disconnected');
   const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [shortcutStatus, setShortcutStatus] = useState<{
+    toggleMute: boolean;
+    toggleDeafen: boolean;
+  } | null>(null);
 
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
@@ -83,6 +87,9 @@ export function useVoiceRoom(options: {
   const screenVideoTrackRef = useRef<LocalVideoTrack | null>(null);
   const screenAudioTrackRef = useRef<LocalAudioTrack | null>(null);
   const audioEngineRef = useRef<RemoteAudioEngine | null>(null);
+  const socketRef = useRef<ConcordSocket | null>(socket);
+  const micRebuildChainRef = useRef<Promise<void>>(Promise.resolve());
+  const joinAttemptIdRef = useRef(0);
 
   const settingsRef = useRef(settings);
   const connectedChannelRef = useRef(connectedChannelId);
@@ -90,6 +97,15 @@ export function useVoiceRoom(options: {
   const deafenedRef = useRef(deafened);
   const screenSharingRef = useRef(screenSharing);
   const mutedBeforeDeafenRef = useRef(false);
+  const displayNameRef = useRef(currentDisplayName);
+
+  useEffect(() => {
+    socketRef.current = socket;
+  }, [socket]);
+
+  useEffect(() => {
+    displayNameRef.current = currentDisplayName;
+  }, [currentDisplayName]);
 
   useEffect(() => {
     settingsRef.current = settings;
@@ -119,14 +135,15 @@ export function useVoiceRoom(options: {
       deafened: boolean;
       screenSharing: boolean;
     }) => {
-      if (socket && socket.connected) {
-        socket.emit('voice:state', next);
+      const sock = socketRef.current;
+      if (sock && sock.connected) {
+        sock.emit('voice:state', next);
       }
     },
-    [socket],
+    [],
   );
 
-  // Sync voice state whenever socket reconnects while in a call
+  // Sync voice state whenever socket connects/reconnects while in a call
   useEffect(() => {
     if (!socket) return;
     const handleConnect = () => {
@@ -140,53 +157,53 @@ export function useVoiceRoom(options: {
       }
     };
     socket.on('connect', handleConnect);
+    if (socket.connected && connectedChannelRef.current) {
+      handleConnect();
+    }
     return () => {
       socket.off('connect', handleConnect);
     };
   }, [socket]);
 
-  const rebuildScreenShares = useCallback(
-    (room: Room | null) => {
-      if (!room) {
-        setScreenShares([]);
-        return;
-      }
+  const rebuildScreenShares = useCallback((room: Room | null) => {
+    if (!room) {
+      setScreenShares([]);
+      return;
+    }
 
-      const shares: ScreenShareStream[] = [];
-      const localPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
-      if (localPub?.track) {
-        const localAudioPub = room.localParticipant.getTrackPublication(
-          Track.Source.ScreenShareAudio,
-        );
+    const shares: ScreenShareStream[] = [];
+    const localPub = room.localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    if (localPub?.track) {
+      const localAudioPub = room.localParticipant.getTrackPublication(
+        Track.Source.ScreenShareAudio,
+      );
+      shares.push({
+        id: `local-${room.localParticipant.identity}`,
+        participantId: room.localParticipant.identity,
+        participantName: displayNameRef.current || room.localParticipant.name || 'Você',
+        videoTrack: localPub.track,
+        hasAudio: Boolean(localAudioPub?.track),
+        isLocal: true,
+      });
+    }
+
+    for (const participant of room.remoteParticipants.values()) {
+      const videoPub = participant.getTrackPublication(Track.Source.ScreenShare);
+      if (videoPub?.track && videoPub.isSubscribed) {
+        const audioPub = participant.getTrackPublication(Track.Source.ScreenShareAudio);
         shares.push({
-          id: `local-${room.localParticipant.identity}`,
-          participantId: room.localParticipant.identity,
-          participantName: currentDisplayName || room.localParticipant.name || 'Você',
-          videoTrack: localPub.track,
-          hasAudio: Boolean(localAudioPub?.track),
-          isLocal: true,
+          id: `remote-${participant.identity}`,
+          participantId: participant.identity,
+          participantName: participant.name || participant.identity,
+          videoTrack: videoPub.track,
+          hasAudio: Boolean(audioPub?.track && audioPub.isSubscribed),
+          isLocal: false,
         });
       }
+    }
 
-      for (const participant of room.remoteParticipants.values()) {
-        const videoPub = participant.getTrackPublication(Track.Source.ScreenShare);
-        if (videoPub?.track && videoPub.isSubscribed) {
-          const audioPub = participant.getTrackPublication(Track.Source.ScreenShareAudio);
-          shares.push({
-            id: `remote-${participant.identity}`,
-            participantId: participant.identity,
-            participantName: participant.name || participant.identity,
-            videoTrack: videoPub.track,
-            hasAudio: Boolean(audioPub?.track && audioPub.isSubscribed),
-            isLocal: false,
-          });
-        }
-      }
-
-      setScreenShares(shares);
-    },
-    [currentDisplayName],
-  );
+    setScreenShares(shares);
+  }, []);
 
   const stopScreenShareInternal = useCallback(async () => {
     const room = roomRef.current;
@@ -221,7 +238,7 @@ export function useVoiceRoom(options: {
     }
   }, [emitVoiceState, rebuildScreenShares]);
 
-  const leaveVoice = useCallback(
+  const leaveVoiceInternal = useCallback(
     async (playSound = true) => {
       const wasConnected = Boolean(connectedChannelRef.current || roomRef.current);
 
@@ -250,6 +267,7 @@ export function useVoiceRoom(options: {
 
       setConnectedChannelId(null);
       connectedChannelRef.current = null;
+      setConnectedAt(null);
       setVoiceState('disconnected');
       setScreenSharing(false);
       screenSharingRef.current = false;
@@ -270,15 +288,27 @@ export function useVoiceRoom(options: {
     [emitVoiceState],
   );
 
-  // Cleanup when user logs out / app unmounts
+  const leaveVoice = useCallback(
+    async (playSound = true) => {
+      joinAttemptIdRef.current++;
+      await leaveVoiceInternal(playSound);
+    },
+    [leaveVoiceInternal],
+  );
+
+  // Leave voice cleanly on logout
   useEffect(() => {
     if (!api || !currentUserId) {
       void leaveVoice(false);
     }
+  }, [api, currentUserId, leaveVoice]);
+
+  // Leave voice cleanly on unmount
+  useEffect(() => {
     return () => {
       void leaveVoice(false);
     };
-  }, [api, currentUserId, leaveVoice]);
+  }, [leaveVoice]);
 
   const createMicTrackWithSettings = useCallback(
     async (cfg: VoiceAudioSettings): Promise<LocalAudioTrack> => {
@@ -309,18 +339,34 @@ export function useVoiceRoom(options: {
         return;
       }
 
+      const attemptId = ++joinAttemptIdRef.current;
       setVoiceError(null);
-      await leaveVoice(false);
+      await leaveVoiceInternal(false);
+      if (joinAttemptIdRef.current !== attemptId) {
+        return;
+      }
 
       setVoiceState('connecting');
       setConnectedChannelId(channelId);
       connectedChannelRef.current = channelId;
 
+      let localEngine: RemoteAudioEngine | null = null;
+      let localRoom: Room | null = null;
+
       try {
         const { token, url } = await api.createVoiceToken(channelId);
+        if (joinAttemptIdRef.current !== attemptId) {
+          return;
+        }
+
         const engine = new RemoteAudioEngine();
+        localEngine = engine;
         engine.setDeafened(deafenedRef.current);
         await engine.setOutputDevice(settingsRef.current.outputDeviceId);
+        if (joinAttemptIdRef.current !== attemptId) {
+          engine.destroy();
+          return;
+        }
         audioEngineRef.current = engine;
 
         const room = new Room({
@@ -328,13 +374,33 @@ export function useVoiceRoom(options: {
           dynacast: true,
           stopLocalTrackOnUnpublish: true,
         });
+        localRoom = room;
         roomRef.current = room;
 
+        const attachAudioPub = (
+          track: RemoteTrack,
+          publication: RemoteTrackPublication,
+          participant: RemoteParticipant,
+        ) => {
+          if (track.kind !== Track.Kind.Audio) return;
+          if (publication.source === Track.Source.ScreenShareAudio) {
+            const vol = settingsRef.current.streamVolumes[participant.identity] ?? 100;
+            engine.attachTrack(`screen:${participant.identity}`, track.mediaStreamTrack, vol);
+          } else {
+            const vol = settingsRef.current.userVolumes[participant.identity] ?? 100;
+            engine.attachTrack(`voice:${participant.identity}`, track.mediaStreamTrack, vol);
+          }
+        };
+
         room.on(RoomEvent.Reconnecting, () => {
-          setVoiceState('reconnecting');
+          if (roomRef.current === room) {
+            setVoiceState('reconnecting');
+          }
         });
         room.on(RoomEvent.Reconnected, () => {
-          setVoiceState('connected');
+          if (roomRef.current === room) {
+            setVoiceState('connected');
+          }
         });
         room.on(RoomEvent.Disconnected, () => {
           if (roomRef.current === room) {
@@ -343,7 +409,9 @@ export function useVoiceRoom(options: {
         });
 
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
-          setSpeakingUserIds(speakers.map((s) => s.identity));
+          if (roomRef.current === room) {
+            setSpeakingUserIds(speakers.map((s) => s.identity));
+          }
         });
 
         room.on(
@@ -353,15 +421,8 @@ export function useVoiceRoom(options: {
             publication: RemoteTrackPublication,
             participant: RemoteParticipant,
           ) => {
-            if (track.kind === Track.Kind.Audio) {
-              if (publication.source === Track.Source.ScreenShareAudio) {
-                const vol = settingsRef.current.streamVolumes[participant.identity] ?? 100;
-                engine.attachTrack(`screen:${participant.identity}`, track.mediaStreamTrack, vol);
-              } else {
-                const vol = settingsRef.current.userVolumes[participant.identity] ?? 100;
-                engine.attachTrack(`voice:${participant.identity}`, track.mediaStreamTrack, vol);
-              }
-            }
+            if (roomRef.current !== room) return;
+            attachAudioPub(track, publication, participant);
             if (
               publication.source === Track.Source.ScreenShare ||
               publication.source === Track.Source.ScreenShareAudio
@@ -378,6 +439,7 @@ export function useVoiceRoom(options: {
             publication: RemoteTrackPublication,
             participant: RemoteParticipant,
           ) => {
+            if (roomRef.current !== room) return;
             if (track.kind === Track.Kind.Audio) {
               if (publication.source === Track.Source.ScreenShareAudio) {
                 engine.detachTrack(`screen:${participant.identity}`);
@@ -395,12 +457,17 @@ export function useVoiceRoom(options: {
         );
 
         room.on(RoomEvent.LocalTrackPublished, (_pub: LocalTrackPublication) => {
-          rebuildScreenShares(room);
+          if (roomRef.current === room) {
+            rebuildScreenShares(room);
+          }
         });
         room.on(RoomEvent.LocalTrackUnpublished, (_pub: LocalTrackPublication) => {
-          rebuildScreenShares(room);
+          if (roomRef.current === room) {
+            rebuildScreenShares(room);
+          }
         });
         room.on(RoomEvent.ParticipantDisconnected, (participant: RemoteParticipant) => {
+          if (roomRef.current !== room) return;
           engine.detachTrack(`voice:${participant.identity}`);
           engine.detachTrack(`screen:${participant.identity}`);
           rebuildScreenShares(room);
@@ -408,14 +475,30 @@ export function useVoiceRoom(options: {
 
         await room.connect(url, token);
 
-        if (roomRef.current !== room) {
+        if (joinAttemptIdRef.current !== attemptId || roomRef.current !== room) {
           await room.disconnect(true).catch(() => undefined);
+          engine.destroy();
           return;
         }
+
+        // Sync any already-subscribed remote tracks immediately upon connect
+        for (const participant of room.remoteParticipants.values()) {
+          for (const pub of participant.trackPublications.values()) {
+            if (pub.isSubscribed && pub.track) {
+              attachAudioPub(pub.track, pub, participant);
+            }
+          }
+        }
+        rebuildScreenShares(room);
 
         // Publish microphone (warn gracefully if PC has no microphone)
         try {
           const micTrack = await createMicTrackWithSettings(settingsRef.current);
+          if (joinAttemptIdRef.current !== attemptId || roomRef.current !== room) {
+            await micTrack.stopProcessor().catch(() => undefined);
+            micTrack.stop();
+            return;
+          }
           micTrackRef.current = micTrack;
           await room.localParticipant.publishTrack(micTrack, {
             source: Track.Source.Microphone,
@@ -424,6 +507,9 @@ export function useVoiceRoom(options: {
             red: true,
           });
         } catch (micErr) {
+          if (joinAttemptIdRef.current !== attemptId) {
+            return;
+          }
           setVoiceError(
             micErr instanceof Error
               ? `Microfone indisponível (ouvindo apenas): ${micErr.message}`
@@ -431,7 +517,12 @@ export function useVoiceRoom(options: {
           );
         }
 
+        if (joinAttemptIdRef.current !== attemptId || roomRef.current !== room) {
+          return;
+        }
+
         setVoiceState('connected');
+        setConnectedAt(Date.now());
         playJoinVoice();
 
         emitVoiceState({
@@ -441,20 +532,28 @@ export function useVoiceRoom(options: {
           screenSharing: false,
         });
       } catch (err) {
+        if (joinAttemptIdRef.current !== attemptId) {
+          if (localRoom && roomRef.current !== localRoom) {
+            await localRoom.disconnect(true).catch(() => undefined);
+          }
+          if (localEngine && audioEngineRef.current !== localEngine) {
+            localEngine.destroy();
+          }
+          return;
+        }
         const message =
           err instanceof Error ? err.message : 'Não foi possível conectar ao canal de voz.';
         setVoiceError(message);
-        await leaveVoice(false);
+        await leaveVoiceInternal(false);
       }
     },
-    [api, createMicTrackWithSettings, emitVoiceState, leaveVoice, rebuildScreenShares],
+    [api, createMicTrackWithSettings, emitVoiceState, leaveVoice, leaveVoiceInternal, rebuildScreenShares],
   );
 
   const toggleMute = useCallback(async () => {
-    let nextMuted = !mutedRef.current;
+    const nextMuted = !mutedRef.current;
     let nextDeafened = deafenedRef.current;
 
-    // Unmuting while deafened also undeafens automatically (Discord behavior)
     if (!nextMuted && nextDeafened) {
       nextDeafened = false;
       setDeafened(false);
@@ -542,7 +641,7 @@ export function useVoiceRoom(options: {
         });
       }
 
-      const stream = await navigator.mediaDevices.getDisplayMedia({
+      const streamConstraints = {
         video: {
           width: { ideal: preset.width },
           height: { ideal: preset.height },
@@ -556,58 +655,70 @@ export function useVoiceRoom(options: {
               autoGainControl: false,
             } as MediaTrackConstraints)
           : false,
-      });
-
-      const rawVideo = stream.getVideoTracks()[0];
-      if (!rawVideo) {
-        for (const t of stream.getTracks()) t.stop();
-        throw new Error('Nenhuma faixa de vídeo retornada pelo sistema.');
-      }
-
-      rawVideo.contentHint = opts.contentHint;
-
-      const localVideo = new LocalVideoTrack(rawVideo, undefined, false);
-      screenVideoTrackRef.current = localVideo;
-
-      rawVideo.onended = () => {
-        void stopScreenShareInternal();
       };
 
-      await room.localParticipant.publishTrack(localVideo, {
-        source: Track.Source.ScreenShare,
-        simulcast: true,
-        screenShareEncoding: {
-          maxBitrate: preset.maxBitrate,
-          maxFramerate: opts.fps,
-        },
-        screenShareSimulcastLayers: [ScreenSharePresets.h720fps15],
-        degradationPreference:
-          opts.contentHint === 'detail' ? 'maintain-resolution' : 'maintain-framerate',
-      });
+      let stream: MediaStream | null = null;
+      try {
+        stream = await navigator.mediaDevices.getDisplayMedia(streamConstraints);
 
-      const rawAudio = stream.getAudioTracks()[0];
-      if (rawAudio) {
-        const localAudio = new LocalAudioTrack(rawAudio, undefined, false);
-        screenAudioTrackRef.current = localAudio;
-        await room.localParticipant.publishTrack(localAudio, {
-          source: Track.Source.ScreenShareAudio,
-          audioPreset: AudioPresets.musicHighQualityStereo,
-          dtx: false,
-          forceStereo: true,
+        const rawVideo = stream.getVideoTracks()[0];
+        if (!rawVideo) {
+          throw new Error('Nenhuma faixa de vídeo retornada pelo sistema.');
+        }
+
+        rawVideo.contentHint = opts.contentHint;
+
+        const localVideo = new LocalVideoTrack(rawVideo, undefined, false);
+        screenVideoTrackRef.current = localVideo;
+
+        rawVideo.onended = () => {
+          void stopScreenShareInternal();
+        };
+
+        await room.localParticipant.publishTrack(localVideo, {
+          source: Track.Source.ScreenShare,
+          simulcast: true,
+          screenShareEncoding: {
+            maxBitrate: preset.maxBitrate,
+            maxFramerate: opts.fps,
+          },
+          screenShareSimulcastLayers: [ScreenSharePresets.h720fps15],
+          degradationPreference:
+            opts.contentHint === 'detail' ? 'maintain-resolution' : 'maintain-framerate',
         });
+
+        const rawAudio = stream.getAudioTracks()[0];
+        if (rawAudio) {
+          const localAudio = new LocalAudioTrack(rawAudio, undefined, false);
+          screenAudioTrackRef.current = localAudio;
+          await room.localParticipant.publishTrack(localAudio, {
+            source: Track.Source.ScreenShareAudio,
+            audioPreset: AudioPresets.musicHighQualityStereo,
+            dtx: false,
+            forceStereo: true,
+          });
+        }
+
+        setScreenSharing(true);
+        screenSharingRef.current = true;
+        rebuildScreenShares(room);
+        playStartStream();
+
+        emitVoiceState({
+          channelId: connectedChannelRef.current,
+          muted: mutedRef.current,
+          deafened: deafenedRef.current,
+          screenSharing: true,
+        });
+      } catch (err) {
+        if (stream) {
+          for (const t of stream.getTracks()) {
+            t.stop();
+          }
+        }
+        await stopScreenShareInternal().catch(() => undefined);
+        throw err;
       }
-
-      setScreenSharing(true);
-      screenSharingRef.current = true;
-      rebuildScreenShares(room);
-      playStartStream();
-
-      emitVoiceState({
-        channelId: connectedChannelRef.current,
-        muted: mutedRef.current,
-        deafened: deafenedRef.current,
-        screenSharing: true,
-      });
     },
     [emitVoiceState, rebuildScreenShares, stopScreenShareInternal],
   );
@@ -628,29 +739,43 @@ export function useVoiceRoom(options: {
         next.echoCancellation !== prev.echoCancellation ||
         next.autoGainControl !== prev.autoGainControl;
 
-      const room = roomRef.current;
-      if (micNeedsRebuild && room && connectedChannelRef.current) {
-        const oldMic = micTrackRef.current;
-        micTrackRef.current = null;
-        if (oldMic) {
-          await room.localParticipant.unpublishTrack(oldMic, true).catch(() => undefined);
-          await oldMic.stopProcessor().catch(() => undefined);
-          oldMic.stop();
-        }
-        try {
-          const newMic = await createMicTrackWithSettings(next);
-          micTrackRef.current = newMic;
-          await room.localParticipant.publishTrack(newMic, {
-            source: Track.Source.Microphone,
-            audioPreset: AudioPresets.speech,
-            dtx: true,
-            red: true,
-          });
-        } catch (err) {
-          setVoiceError(
-            err instanceof Error ? err.message : 'Erro ao atualizar microfone.',
-          );
-        }
+      if (micNeedsRebuild) {
+        const runRebuild = async () => {
+          const room = roomRef.current;
+          if (!room || !connectedChannelRef.current) return;
+
+          const latestSettings = settingsRef.current;
+          const oldMic = micTrackRef.current;
+          micTrackRef.current = null;
+          if (oldMic) {
+            await room.localParticipant.unpublishTrack(oldMic, true).catch(() => undefined);
+            await oldMic.stopProcessor().catch(() => undefined);
+            oldMic.stop();
+          }
+
+          try {
+            const newMic = await createMicTrackWithSettings(latestSettings);
+            if (roomRef.current !== room || !connectedChannelRef.current) {
+              await newMic.stopProcessor().catch(() => undefined);
+              newMic.stop();
+              return;
+            }
+            micTrackRef.current = newMic;
+            await room.localParticipant.publishTrack(newMic, {
+              source: Track.Source.Microphone,
+              audioPreset: AudioPresets.speech,
+              dtx: true,
+              red: true,
+            });
+          } catch (err) {
+            setVoiceError(
+              err instanceof Error ? err.message : 'Erro ao atualizar microfone.',
+            );
+          }
+        };
+
+        micRebuildChainRef.current = micRebuildChainRef.current.then(runRebuild, runRebuild);
+        await micRebuildChainRef.current;
       }
     },
     [createMicTrackWithSettings],
@@ -674,10 +799,21 @@ export function useVoiceRoom(options: {
     }));
   }, []);
 
+  const clearVoiceError = useCallback(() => {
+    setVoiceError(null);
+  }, []);
+
   // Register Electron global shortcuts & listen to shortcut triggers
   useEffect(() => {
     if (!window.concordAPI) return;
-    void window.concordAPI.registerShortcuts(settings.shortcuts);
+    void window.concordAPI
+      .registerShortcuts(settings.shortcuts)
+      .then((res) => {
+        if (res?.registered) {
+          setShortcutStatus(res.registered);
+        }
+      })
+      .catch(() => undefined);
   }, [settings.shortcuts]);
 
   useEffect(() => {
@@ -694,9 +830,11 @@ export function useVoiceRoom(options: {
   return {
     settings,
     connectedChannelId,
+    connectedAt,
     voiceState,
     voiceError,
-    clearVoiceError: () => setVoiceError(null),
+    clearVoiceError,
+    shortcutStatus,
     muted,
     deafened,
     screenSharing,

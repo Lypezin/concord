@@ -96,7 +96,14 @@ export async function checkForUpdates(): Promise<UpdaterStatus> {
     };
     return currentStatus;
   }
-  await autoUpdater.checkForUpdates();
+  try {
+    await autoUpdater.checkForUpdates();
+  } catch (err) {
+    currentStatus = {
+      state: 'error',
+      message: err instanceof Error ? err.message : 'Erro ao verificar atualizações.',
+    };
+  }
   return currentStatus;
 }
 

@@ -8,14 +8,31 @@ import { ensureLiveKitBinary } from './ensure-livekit.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const rootDir = path.resolve(__dirname, '..');
 
+function isTailscaleCgnatIpv4(address) {
+  const parts = address.split('.').map(Number);
+  if (parts.length !== 4) return false;
+  const [a, b] = parts;
+  return a === 100 && b !== undefined && b >= 64 && b <= 127;
+}
+
 function detectTailscaleIp() {
   const interfaces = os.networkInterfaces();
-  for (const [, addrs] of Object.entries(interfaces)) {
+
+  // Pass 1: prefer explicit Tailscale network adapter
+  for (const [name, addrs] of Object.entries(interfaces)) {
+    if (!addrs || !/tailscale/i.test(name)) continue;
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal && isTailscaleCgnatIpv4(addr.address)) {
+        return addr.address;
+      }
+    }
+  }
+
+  // Pass 2: fallback to any non-internal 100.64.0.0/10 address
+  for (const addrs of Object.values(interfaces)) {
     if (!addrs) continue;
     for (const addr of addrs) {
-      if (addr.family !== 'IPv4' || addr.internal) continue;
-      const [a, b] = addr.address.split('.').map(Number);
-      if (a === 100 && b !== undefined && b >= 64 && b <= 127) {
+      if (addr.family === 'IPv4' && !addr.internal && isTailscaleCgnatIpv4(addr.address)) {
         return addr.address;
       }
     }
@@ -39,22 +56,26 @@ async function main() {
 
   const port = process.env.CONCORD_PORT || '3000';
   const lkPort = process.env.CONCORD_LIVEKIT_PORT || '7880';
-  const dataDir = path.join(rootDir, 'apps', 'server', 'data');
+  const lkTcpPort = process.env.CONCORD_LIVEKIT_TCP_PORT || '7881';
+  const lkUdpPort = process.env.CONCORD_LIVEKIT_UDP_PORT || '7882';
+  const dataDir = process.env.CONCORD_DATA_DIR || path.join(rootDir, 'apps', 'server', 'data');
   const tsIp = detectTailscaleIp();
 
   console.log('');
   console.log('======================================================');
   console.log('                 CONCORD SERVER ONLINE                ');
   console.log('======================================================');
-  console.log(`  Localhost : http://127.0.0.1:${port}`);
+  console.log(`  Localhost      : http://127.0.0.1:${port}`);
   if (tsIp) {
-    console.log(`  Tailscale : http://${tsIp}:${port}  <-- envie este para seus amigos`);
+    console.log(`  Tailscale      : http://${tsIp}:${port}  <-- envie este para seus amigos`);
   } else {
-    console.log('  Tailscale : nao detectado (rode o Tailscale para seus amigos entrarem)');
+    console.log('  Tailscale      : nao detectado (rode o Tailscale para seus amigos entrarem)');
   }
-  console.log(`  LiveKit   : ws://127.0.0.1:${lkPort} (UDP 7882 / TCP 7881)`);
-  console.log(`  Dados     : ${dataDir}`);
+  console.log(`  LiveKit        : ws://127.0.0.1:${lkPort} (UDP ${lkUdpPort} / TCP ${lkTcpPort})`);
+  console.log(`  LiveKit ICE IP : ${process.env.CONCORD_LIVEKIT_NODE_IP || tsIp || 'auto'}`);
+  console.log(`  Dados          : ${dataDir}`);
   console.log('------------------------------------------------------');
+  console.log('  Se um amigo nao conseguir conectar, execute Liberar-Firewall-Concord.bat uma vez.');
   console.log('  Pressione Ctrl+C para desligar o servidor com seguranca.');
   console.log('======================================================');
   console.log('');

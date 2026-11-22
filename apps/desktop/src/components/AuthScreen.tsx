@@ -109,10 +109,31 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
     setInviteCode(decoded.inviteCode);
     setTab('register');
     setTailscaleAuthKey(decoded.tailscaleAuthKey ?? null);
-    setUnifiedFeedback('Convite preenchido automaticamente! Conectando ao servidor...');
-    if (window.concordAPI) {
-      void window.concordAPI.getTailscaleStatus().then(setTailscaleStatus).catch(() => undefined);
+
+    if (decoded.tailscaleAuthKey && window.concordAPI) {
+      void window.concordAPI
+        .getTailscaleStatus()
+        .then((st) => {
+          setTailscaleStatus(st);
+          if (st.connected) {
+            setUnifiedFeedback('Convite preenchido automaticamente! Conectando ao servidor...');
+            void checkServer(decoded.serverUrl);
+          } else {
+            setStatus(null);
+            setServerError(null);
+            setUnifiedFeedback(
+              'Convite reconhecido! Conecte a rede privada Tailscale abaixo antes de entrar no servidor.',
+            );
+          }
+        })
+        .catch(() => {
+          setUnifiedFeedback('Convite preenchido automaticamente! Conectando ao servidor...');
+          void checkServer(decoded.serverUrl);
+        });
+      return;
     }
+
+    setUnifiedFeedback('Convite preenchido automaticamente! Conectando ao servidor...');
     void checkServer(decoded.serverUrl);
   }
 
@@ -175,25 +196,45 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
     }
   }
 
+  const inputClass =
+    'w-full rounded-xl border border-white/[0.08] bg-[#0a0d14] px-3.5 py-2.5 text-sm text-slate-100 placeholder:text-slate-600 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20';
+
   return (
-    <div className="flex flex-1 items-center justify-center overflow-y-auto bg-[radial-gradient(ellipse_at_top,_rgba(99,102,241,0.16),_transparent_55%)] p-6">
-      <div className="w-full max-w-md space-y-5 rounded-2xl border border-white/10 bg-[#161922]/95 p-7 shadow-2xl">
+    <div className="relative flex flex-1 items-center justify-center overflow-y-auto bg-[#080a0f] p-6">
+      {/* Ambient aurora */}
+      <div className="pointer-events-none fixed -left-32 -top-24 h-[420px] w-[420px] rounded-full bg-indigo-600/18 blur-[130px]" />
+      <div className="pointer-events-none fixed -bottom-32 -right-24 h-[420px] w-[420px] rounded-full bg-violet-600/14 blur-[130px]" />
+
+      <div className="concord-glass animate-modal-in relative w-full max-w-md space-y-5 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121622]/90 p-7 backdrop-blur-xl">
+        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/50 to-transparent" />
+
         <div className="text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 to-violet-600 text-xl font-bold text-white shadow-lg shadow-indigo-500/25">
-            C
+          <div className="mx-auto mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-indigo-500 via-violet-500 to-fuchsia-500 shadow-[0_0_28px_rgba(99,102,241,0.4)] ring-1 ring-inset ring-white/25">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-6 w-6 text-white"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2.3"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            >
+              <path d="M16.5 7.5a6.5 6.5 0 1 0 0 9" />
+              <circle cx="17.5" cy="12" r="1.6" fill="currentColor" stroke="none" />
+            </svg>
           </div>
           <h1 className="text-xl font-bold tracking-tight text-white">
             {status?.serverName || 'Concord'}
           </h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Chat, voz e tela só entre vocês.
+          <p className="mt-1 text-xs font-medium text-slate-400">
+            Chat, voz e tela com qualidade máxima só entre vocês.
           </p>
         </div>
 
         {/* Convite unificado rápido */}
-        <div className="rounded-xl border border-white/8 bg-[#0f1117]/80 p-3.5">
-          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-indigo-300">
-            <Sparkles className="h-3.5 w-3.5" />
+        <div className="rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-3.5">
+          <label className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold text-indigo-300">
+            <Sparkles className="h-3.5 w-3.5 text-indigo-400" />
             Recebeu um convite unificado? Cole aqui
           </label>
           <input
@@ -201,30 +242,28 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
             value={unifiedInput}
             onChange={(e) => handleApplyUnifiedInvite(e.target.value)}
             placeholder="CONCORD-eyJzZXJ2ZXJVcmwiOi..."
-            className="w-full rounded-lg border border-white/10 bg-[#161922] px-3 py-2 text-xs text-slate-200 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+            className="w-full rounded-lg border border-white/[0.08] bg-[#121622] px-3 py-2 font-mono text-xs text-slate-200 placeholder:font-sans placeholder:text-slate-600 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
           />
           {unifiedFeedback && (
-            <p className="mt-1.5 text-xs text-indigo-300">{unifiedFeedback}</p>
+            <p className="mt-1.5 text-xs leading-relaxed text-indigo-300">{unifiedFeedback}</p>
           )}
           {tailscaleAuthKey && window.concordAPI && (
-            <div className="mt-2.5 rounded-lg border border-indigo-500/25 bg-indigo-500/10 p-2.5">
+            <div className="mt-2.5 rounded-xl border border-indigo-500/25 bg-indigo-500/[0.09] p-3">
               {tailscaleStatus?.connected ? (
-                <div className="flex items-center gap-1.5 text-xs font-medium text-emerald-300">
-                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-                  Rede privada Tailscale ativa ({tailscaleStatus.selfIp})
+                <div className="flex items-center gap-2 text-xs font-medium text-emerald-300">
+                  <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-400" />
+                  <span>Rede privada Tailscale ativa ({tailscaleStatus.selfIp})</span>
                 </div>
               ) : (
-                <div className="space-y-2">
-                  <div className="flex items-center justify-between gap-2">
-                    <span className="text-[11px] text-indigo-200">
-                      Este convite usa rede privada segura (Tailscale).
-                    </span>
-                  </div>
+                <div className="space-y-2.5">
+                  <span className="block text-[11px] leading-relaxed text-indigo-200/90">
+                    Este convite usa rede privada segura (Tailscale).
+                  </span>
                   <button
                     type="button"
                     onClick={() => void handleSetupTailscale()}
                     disabled={tailscaleBusy}
-                    className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-semibold text-white transition hover:bg-indigo-500 disabled:opacity-50"
+                    className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-500/20 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
                   >
                     {tailscaleBusy ? (
                       <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -236,14 +275,19 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                       : 'Instalar e Conectar Tailscale'}
                   </button>
                   {tailscaleProgress && (
-                    <div className="space-y-1">
-                      <div className="text-[11px] text-indigo-200">
-                        {tailscaleProgress.message}
+                    <div className="space-y-1.5">
+                      <div className="flex items-center justify-between gap-2 text-[11px] text-indigo-200">
+                        <span className="truncate">{tailscaleProgress.message}</span>
+                        {typeof tailscaleProgress.percent === 'number' && (
+                          <span className="shrink-0 font-mono text-[10px] font-semibold text-indigo-300">
+                            {tailscaleProgress.percent}%
+                          </span>
+                        )}
                       </div>
                       {typeof tailscaleProgress.percent === 'number' && (
-                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/30">
+                        <div className="h-1.5 w-full overflow-hidden rounded-full bg-black/40">
                           <div
-                            className="h-full bg-indigo-400 transition-all"
+                            className="h-full rounded-full bg-gradient-to-r from-indigo-500 to-violet-400 transition-all duration-200"
                             style={{ width: `${tailscaleProgress.percent}%` }}
                           />
                         </div>
@@ -251,7 +295,9 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                     </div>
                   )}
                   {tailscaleError && (
-                    <div className="text-[11px] text-rose-300">{tailscaleError}</div>
+                    <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-200">
+                      {tailscaleError}
+                    </div>
                   )}
                 </div>
               )}
@@ -277,13 +323,13 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                 }
               }}
               placeholder="http://127.0.0.1:3000"
-              className="flex-1 rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-500 focus:border-indigo-500 focus:outline-none"
+              className="flex-1 rounded-xl border border-white/[0.08] bg-[#0a0d14] px-3 py-2 font-mono text-xs text-slate-100 placeholder:text-slate-600 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
             />
             <button
               type="button"
               onClick={() => void checkServer(serverUrl)}
               disabled={checkingServer}
-              className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-white/5 px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/10 disabled:opacity-50"
+              className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.08] bg-white/[0.05] px-3 py-2 text-xs font-medium text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-50"
             >
               {checkingServer ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -294,14 +340,17 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
             </button>
           </div>
           {serverError && (
-            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
               {serverError}
             </div>
           )}
           {status && (
-            <div className="flex items-center justify-between text-[11px] text-slate-400">
-              <span className="text-emerald-400">Servidor online</span>
-              <span>
+            <div className="flex items-center justify-between pt-0.5 text-[11px] text-slate-400">
+              <span className="inline-flex items-center gap-1.5 font-medium text-emerald-300">
+                <span className="h-1.5 w-1.5 rounded-full bg-emerald-400 shadow-[0_0_8px_#34d399]" />
+                Servidor online
+              </span>
+              <span className="rounded-full bg-white/[0.05] px-2 py-0.5 text-[10px] font-medium text-slate-300">
                 Membros: {status.userCount}/{status.maxUsers}
               </span>
             </div>
@@ -309,19 +358,19 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
         </div>
 
         {status && (
-          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-4">
+          <form onSubmit={(e) => void handleSubmit(e)} className="space-y-3.5">
             {status.needsAdminSetup ? (
-              <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3 text-xs text-indigo-200">
+              <div className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 p-3.5 text-xs text-indigo-200">
                 <div className="flex items-center gap-1.5 font-semibold text-indigo-100">
                   <ShieldCheck className="h-4 w-4 text-indigo-400" />
                   Configuração Inicial do Servidor
                 </div>
-                <p className="mt-1 text-indigo-200/80">
+                <p className="mt-1 leading-relaxed text-indigo-200/80">
                   Crie a primeira conta de Administrador para liberar o servidor e gerar convites para seus amigos.
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 rounded-xl bg-[#0f1117] p-1">
+              <div className="grid grid-cols-2 gap-1 rounded-xl border border-white/[0.06] bg-[#0a0d14] p-1">
                 <button
                   type="button"
                   onClick={() => {
@@ -330,7 +379,7 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                   }}
                   className={`rounded-lg py-1.5 text-xs font-semibold transition ${
                     tab === 'login'
-                      ? 'bg-indigo-600 text-white shadow'
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -344,7 +393,7 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                   }}
                   className={`rounded-lg py-1.5 text-xs font-semibold transition ${
                     tab === 'register'
-                      ? 'bg-indigo-600 text-white shadow'
+                      ? 'bg-gradient-to-r from-indigo-600 to-violet-600 text-white shadow'
                       : 'text-slate-400 hover:text-slate-200'
                   }`}
                 >
@@ -365,7 +414,7 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                   value={inviteCode}
                   onChange={(e) => setInviteCode(e.target.value.toUpperCase())}
                   placeholder="ABCD-1234"
-                  className="w-full rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2 text-sm uppercase tracking-wider text-slate-100 placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
+                  className={`${inputClass} font-mono uppercase tracking-wider`}
                 />
               </div>
             )}
@@ -378,7 +427,7 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 placeholder="ex: luiz"
-                className="w-full rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
+                className={inputClass}
               />
             </div>
 
@@ -391,7 +440,7 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Como seus amigos te chamam"
-                  className="w-full rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
+                  className={inputClass}
                 />
               </div>
             )}
@@ -404,12 +453,12 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 placeholder="••••••••"
-                className="w-full rounded-lg border border-white/10 bg-[#0f1117] px-3 py-2 text-sm text-slate-100 placeholder:text-slate-600 focus:border-indigo-500 focus:outline-none"
+                className={inputClass}
               />
             </div>
 
             {formError && (
-              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
                 {formError}
               </div>
             )}
@@ -417,7 +466,7 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
             <button
               type="submit"
               disabled={submitting}
-              className="flex w-full items-center justify-center gap-2 rounded-xl bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:bg-indigo-500 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-sm font-semibold text-white shadow-lg shadow-indigo-600/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
             >
               {submitting ? (
                 <Loader2 className="h-4 w-4 animate-spin" />

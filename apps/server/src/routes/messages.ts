@@ -222,21 +222,23 @@ export function registerMessageRoutes(fastify: FastifyInstance, ctx: RouteContex
     }
 
     const emoji = input.emoji.trim();
-    const alreadyReacted = db
-      .prepare('SELECT 1 FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?')
-      .get(id, user.id, emoji);
+    withTransaction(db, () => {
+      const alreadyReacted = db
+        .prepare('SELECT 1 FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?')
+        .get(id, user.id, emoji);
 
-    if (alreadyReacted) {
-      db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(
-        id,
-        user.id,
-        emoji,
-      );
-    } else {
-      db.prepare(
-        'INSERT INTO reactions (message_id, user_id, emoji, created_at) VALUES (?, ?, ?, ?)',
-      ).run(id, user.id, emoji, new Date().toISOString());
-    }
+      if (alreadyReacted) {
+        db.prepare('DELETE FROM reactions WHERE message_id = ? AND user_id = ? AND emoji = ?').run(
+          id,
+          user.id,
+          emoji,
+        );
+      } else {
+        db.prepare(
+          'INSERT INTO reactions (message_id, user_id, emoji, created_at) VALUES (?, ?, ?, ?)',
+        ).run(id, user.id, emoji, new Date().toISOString());
+      }
+    });
 
     const updated = getMessageById(db, id)!;
     realtime.emitMessageUpdated(updated);

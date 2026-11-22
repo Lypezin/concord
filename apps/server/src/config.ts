@@ -50,7 +50,7 @@ export function loadServerConfig(options: ServerOptions = {}): ServerConfig {
     uploadsDir,
     maxUsers: options.maxUsers ?? Number(process.env.CONCORD_MAX_USERS ?? 4),
     serverName: options.serverName ?? process.env.CONCORD_SERVER_NAME ?? 'Concord',
-    version: '0.1.0',
+    version: '0.2.0',
     livekitPort: options.livekitPort ?? Number(process.env.CONCORD_LIVEKIT_PORT ?? 7880),
     livekitTcpPort: options.livekitTcpPort ?? Number(process.env.CONCORD_LIVEKIT_TCP_PORT ?? 7881),
     livekitUdpPort: options.livekitUdpPort ?? Number(process.env.CONCORD_LIVEKIT_UDP_PORT ?? 7882),

@@ -163,6 +163,42 @@ function registerAppProtocol(): void {
   });
 }
 
+function isTrustedAppOrigin(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    return (
+      parsed.protocol === 'concord:' ||
+      (parsed.protocol === 'http:' &&
+        (parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1') &&
+        parsed.port === '5173')
+    );
+  } catch {
+    return false;
+  }
+}
+
+const ALLOWED_PERMISSIONS = new Set([
+  'media',
+  'display-capture',
+  'speaker-selection',
+  'notifications',
+  'fullscreen',
+  'clipboard-sanitized-write',
+]);
+
+function setupPermissionHandlers(): void {
+  session.defaultSession.setPermissionCheckHandler((_webContents, permission, requestingOrigin) => {
+    return isTrustedAppOrigin(requestingOrigin) && ALLOWED_PERMISSIONS.has(permission);
+  });
+
+  session.defaultSession.setPermissionRequestHandler(
+    (webContents, permission, callback, details) => {
+      const origin = details?.requestingUrl || webContents.getURL();
+      callback(isTrustedAppOrigin(origin) && ALLOWED_PERMISSIONS.has(permission));
+    },
+  );
+}
+
 function setupDisplayMediaHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {
@@ -235,13 +271,13 @@ function createWindow(): void {
     height: 800,
     minWidth: 960,
     minHeight: 620,
-    backgroundColor: '#0f1117',
+    backgroundColor: '#080a0f',
     icon: icon.isEmpty() ? undefined : icon,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#0f1117',
+      color: '#080a0f',
       symbolColor: '#94a3b8',
-      height: 36,
+      height: 38,
     },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -298,6 +334,7 @@ if (!gotLock) {
     }
     Menu.setApplicationMenu(null);
     registerAppProtocol();
+    setupPermissionHandlers();
     setupDisplayMediaHandler();
 
     ipcMain.handle('session:load', () => loadSavedSession());
@@ -315,10 +352,11 @@ if (!gotLock) {
         return;
       }
       if (!Notification.isSupported()) return;
+      const notifIcon = nativeImage.createFromPath(getIconPath());
       const notification = new Notification({
         title: String(payload?.title ?? 'Concord').slice(0, 80),
         body: String(payload?.body ?? '').slice(0, 240),
-        icon: getIconPath(),
+        icon: notifIcon.isEmpty() ? undefined : notifIcon,
       });
       notification.on('click', () => showMainWindow());
       notification.show();
@@ -344,13 +382,15 @@ if (!gotLock) {
         thumbnailSize: { width: 320, height: 180 },
         fetchWindowIcons: true,
       });
-      return sources.map((src) => ({
-        id: src.id,
-        name: src.name,
-        type: src.id.startsWith('screen:') ? 'screen' : 'window',
-        thumbnail: src.thumbnail.toDataURL(),
-        appIcon: src.appIcon && !src.appIcon.isEmpty() ? src.appIcon.toDataURL() : null,
-      }));
+      return sources
+        .filter((src) => src.name.trim().length > 0 && !src.thumbnail.isEmpty())
+        .map((src) => ({
+          id: src.id,
+          name: src.name,
+          type: src.id.startsWith('screen:') ? 'screen' : 'window',
+          thumbnail: src.thumbnail.toDataURL(),
+          appIcon: src.appIcon && !src.appIcon.isEmpty() ? src.appIcon.toDataURL() : null,
+        }));
     });
 
     ipcMain.handle(

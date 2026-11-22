@@ -1,6 +1,6 @@
 {
   "name": "@concord/desktop",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Chat, voz e compartilhamento de tela privado entre amigos",
   "author": "Lypezin",
   "private": true,
@@ -48,6 +48,9 @@
       "dist-electron/**/*",
       "electron/icon.png"
     ],
+    "asarUnpack": [
+      "electron/icon.png"
+    ],
     "win": {
       "target": "nsis",
       "icon": "electron/icon.png",
@@ -63,7 +66,8 @@
     "publish": {
       "provider": "github",
       "owner": "Lypezin",
-      "repo": "concord"
+      "repo": "concord",
+      "releaseType": "release"
     }
   }
 }

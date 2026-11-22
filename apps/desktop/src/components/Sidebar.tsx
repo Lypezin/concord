@@ -33,6 +33,8 @@ interface SidebarProps {
 
   connectedVoiceChannelId: string | null;
   voiceConnectionState: VoiceConnectionState;
+  connectedAt: number | null;
+  totalUnreadCount: number;
   voiceParticipants: Record<string, string[]>;
   voiceStates: Record<string, VoiceUserState>;
   speakingUserIds: string[];
@@ -73,6 +75,8 @@ export function Sidebar({
   mutedNotifications,
   connectedVoiceChannelId,
   voiceConnectionState,
+  connectedAt,
+  totalUnreadCount,
   voiceParticipants,
   voiceStates,
   speakingUserIds,
@@ -108,12 +112,14 @@ export function Sidebar({
     channels.find((c) => c.id === connectedVoiceChannelId) ?? null;
 
   return (
-    <aside className="flex w-64 shrink-0 flex-col border-r border-white/6 bg-[#131620]">
+    <aside className="relative flex w-[268px] shrink-0 flex-col border-r border-white/[0.06] bg-[#0d1017]">
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-28 bg-gradient-to-b from-indigo-500/[0.06] to-transparent" />
+
       {/* Cabeçalho do Servidor */}
-      <div className="flex items-center justify-between border-b border-white/6 px-3.5 py-3">
+      <div className="relative flex items-center justify-between border-b border-white/[0.06] px-3.5 py-3">
         <div className="min-w-0">
-          <h2 className="truncate text-sm font-bold text-white">{serverName}</h2>
-          <p className="text-[11px] text-slate-400">
+          <h2 className="truncate text-sm font-bold tracking-tight text-white">{serverName}</h2>
+          <p className="mt-0.5 text-[11px] font-medium text-slate-400">
             {userCount}/{maxUsers} membros
           </p>
         </div>
@@ -121,28 +127,28 @@ export function Sidebar({
           <button
             type="button"
             onClick={onOpenInvites}
-            title="Gerenciar convites"
-            className="inline-flex items-center gap-1 rounded-lg border border-indigo-500/30 bg-indigo-500/15 px-2.5 py-1 text-[11px] font-semibold text-indigo-200 transition hover:bg-indigo-500/25"
+            title="Gerenciar convites privados"
+            className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-indigo-400/30 bg-gradient-to-r from-indigo-500/20 to-violet-500/15 px-2.5 py-1 text-[11px] font-semibold text-indigo-100 shadow-sm transition hover:border-indigo-400/50 hover:from-indigo-500/30 hover:to-violet-500/25"
           >
-            <UserPlus className="h-3.5 w-3.5" />
+            <UserPlus className="h-3.5 w-3.5 text-indigo-300" />
             Convites
           </button>
         )}
       </div>
 
       {/* Lista de Canais */}
-      <div className="flex-1 space-y-5 overflow-y-auto px-2 py-3">
+      <div className="relative flex-1 space-y-5 overflow-y-auto px-2 py-3.5">
         {/* Canais de Texto */}
         <div>
-          <div className="mb-1 flex items-center justify-between px-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mb-1.5 flex items-center justify-between px-2">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
               Canais de Texto
             </span>
             <button
               type="button"
               onClick={() => onOpenCreateChannel('text')}
               title="Criar canal de texto"
-              className="rounded p-0.5 text-slate-400 transition hover:bg-white/8 hover:text-white"
+              className="rounded-md p-0.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
@@ -156,14 +162,18 @@ export function Sidebar({
               return (
                 <div
                   key={ch.id}
-                  className={`group flex items-center justify-between rounded-lg px-2 py-1.5 text-sm transition ${
+                  className={`group relative flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13.5px] transition ${
                     isActive
-                      ? 'bg-indigo-600/20 text-white'
+                      ? 'bg-gradient-to-r from-indigo-500/18 to-violet-500/8 text-white shadow-[inset_0_1px_0_rgba(255,255,255,0.06)]'
                       : unread > 0
-                        ? 'text-slate-100 hover:bg-white/5'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                        ? 'text-slate-100 hover:bg-white/[0.05]'
+                        : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
                   }`}
                 >
+                  {isActive && (
+                    <span className="absolute left-0 top-1.5 bottom-1.5 w-[3px] rounded-r-full bg-indigo-400 shadow-[0_0_8px_rgba(129,140,248,0.85)]" />
+                  )}
+
                   <button
                     type="button"
                     onClick={() => onSelectChannel(ch)}
@@ -171,21 +181,21 @@ export function Sidebar({
                   >
                     <Hash
                       className={`h-4 w-4 shrink-0 ${
-                        isActive ? 'text-indigo-400' : 'text-slate-500'
+                        isActive ? 'text-indigo-400' : unread > 0 ? 'text-indigo-300' : 'text-slate-500'
                       }`}
                     />
                     <span
                       className={`truncate ${
-                        unread > 0 && !isActive ? 'font-semibold' : 'font-medium'
+                        isActive || unread > 0 ? 'font-semibold' : 'font-medium'
                       }`}
                     >
                       {ch.name}
                     </span>
                   </button>
 
-                  <div className="flex items-center gap-1">
+                  <div className="flex items-center gap-0.5">
                     {unread > 0 && !isActive && (
-                      <span className="rounded-full bg-indigo-500 px-1.5 py-0.2 text-[10px] font-bold text-white">
+                      <span className="rounded-full bg-indigo-500 px-1.5 py-0.2 text-[10px] font-bold text-white shadow-sm">
                         {unread > 99 ? '99+' : unread}
                       </span>
                     )}
@@ -193,7 +203,7 @@ export function Sidebar({
                       type="button"
                       onClick={() => onOpenRenameChannel(ch)}
                       title="Renomear canal"
-                      className="hidden rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white group-hover:inline-flex"
+                      className="hidden rounded-md p-1 text-slate-400 transition hover:bg-white/10 hover:text-white group-hover:inline-flex"
                     >
                       <Pencil className="h-3 w-3" />
                     </button>
@@ -202,7 +212,7 @@ export function Sidebar({
                         type="button"
                         onClick={() => onDeleteChannel(ch)}
                         title="Excluir canal"
-                        className="hidden rounded p-1 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
+                        className="hidden rounded-md p-1 text-slate-400 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -216,21 +226,21 @@ export function Sidebar({
 
         {/* Canais de Voz */}
         <div>
-          <div className="mb-1 flex items-center justify-between px-2">
-            <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+          <div className="mb-1.5 flex items-center justify-between px-2">
+            <span className="text-[10.5px] font-bold uppercase tracking-wider text-slate-500">
               Canais de Voz
             </span>
             <button
               type="button"
               onClick={() => onOpenCreateChannel('voice')}
               title="Criar canal de voz"
-              className="rounded p-0.5 text-slate-400 transition hover:bg-white/8 hover:text-white"
+              className="rounded-md p-0.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
             >
               <Plus className="h-3.5 w-3.5" />
             </button>
           </div>
 
-          <div className="space-y-0.5">
+          <div className="space-y-1">
             {voiceChannels.map((ch) => {
               const isConnectedHere = connectedVoiceChannelId === ch.id;
               const participantIds = voiceParticipants[ch.id] ?? [];
@@ -241,10 +251,10 @@ export function Sidebar({
               return (
                 <div key={ch.id}>
                   <div
-                    className={`group flex items-center justify-between rounded-lg px-2 py-1.5 text-sm transition ${
+                    className={`group flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13.5px] transition ${
                       isConnectedHere
-                        ? 'bg-emerald-500/15 text-emerald-200'
-                        : 'text-slate-400 hover:bg-white/5 hover:text-slate-200'
+                        ? 'bg-emerald-500/12 text-emerald-100 ring-1 ring-inset ring-emerald-500/20'
+                        : 'text-slate-400 hover:bg-white/[0.05] hover:text-slate-200'
                     }`}
                   >
                     <button
@@ -257,15 +267,22 @@ export function Sidebar({
                           isConnectedHere ? 'text-emerald-400' : 'text-slate-500'
                         }`}
                       />
-                      <span className="truncate font-medium">{ch.name}</span>
+                      <span className={`truncate ${isConnectedHere ? 'font-semibold' : 'font-medium'}`}>
+                        {ch.name}
+                      </span>
                     </button>
 
                     <div className="flex items-center gap-1">
+                      {participantUsers.length > 0 && (
+                        <span className="rounded-full bg-white/[0.07] px-1.5 py-0.2 text-[10px] font-semibold tabular-nums text-slate-300 group-hover:hidden">
+                          {participantUsers.length}
+                        </span>
+                      )}
                       <button
                         type="button"
                         onClick={() => onOpenRenameChannel(ch)}
                         title="Renomear canal"
-                        className="hidden rounded p-1 text-slate-400 hover:bg-white/10 hover:text-white group-hover:inline-flex"
+                        className="hidden rounded-md p-1 text-slate-400 transition hover:bg-white/10 hover:text-white group-hover:inline-flex"
                       >
                         <Pencil className="h-3 w-3" />
                       </button>
@@ -273,7 +290,7 @@ export function Sidebar({
                         type="button"
                         onClick={() => onDeleteChannel(ch)}
                         title="Excluir canal"
-                        className="hidden rounded p-1 text-slate-400 hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
+                        className="hidden rounded-md p-1 text-slate-400 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
                       >
                         <Trash2 className="h-3 w-3" />
                       </button>
@@ -282,7 +299,7 @@ export function Sidebar({
 
                   {/* Participantes dentro do canal de voz */}
                   {participantUsers.length > 0 && (
-                    <div className="ml-4 mt-0.5 space-y-1 border-l border-white/8 pl-2">
+                    <div className="ml-4 mt-1 space-y-1 border-l border-white/[0.08] pl-2.5">
                       {participantUsers.map((u) => {
                         const st = voiceStates[u.id];
                         const isSpeaking = speakingSet.has(u.id);
@@ -299,28 +316,37 @@ export function Sidebar({
                                 }
                               }}
                               title={isMe ? undefined : 'Clique para ajustar o volume deste amigo'}
-                              className={`flex items-center justify-between gap-1.5 rounded-md px-1.5 py-1 text-xs ${
+                              className={`flex items-center justify-between gap-1.5 rounded-lg px-1.5 py-1 text-xs transition ${
                                 isMe
                                   ? 'text-slate-200'
-                                  : 'cursor-pointer text-slate-300 hover:bg-white/5'
+                                  : 'cursor-pointer text-slate-300 hover:bg-white/[0.05]'
                               }`}
                             >
-                              <div className="flex min-w-0 items-center gap-1.5">
-                                <div
-                                  className={`rounded-full p-[1px] ${
-                                    isSpeaking ? 'ring-2 ring-emerald-400' : ''
+                              <div className="flex min-w-0 items-center gap-2">
+                                <Avatar
+                                  displayName={u.displayName}
+                                  color={u.avatarColor}
+                                  size="xs"
+                                  speaking={isSpeaking}
+                                  ringBg="border-[#0d1017]"
+                                />
+                                <span
+                                  className={`truncate font-medium ${
+                                    isSpeaking ? 'text-emerald-200' : 'text-slate-200'
                                   }`}
                                 >
-                                  <Avatar
-                                    displayName={u.displayName}
-                                    color={u.avatarColor}
-                                    size="sm"
-                                  />
-                                </div>
-                                <span className="truncate font-medium">{u.displayName}</span>
+                                  {u.displayName}
+                                </span>
                               </div>
 
-                              <div className="flex shrink-0 items-center gap-1">
+                              <div className="flex shrink-0 items-center gap-1.5">
+                                {isSpeaking && !st?.muted && !st?.deafened && (
+                                  <span className="flex h-3 items-end gap-[2px]" aria-hidden="true">
+                                    <span className="voice-bar-1 h-2.5 w-[2px] rounded-full bg-emerald-400" />
+                                    <span className="voice-bar-2 h-3 w-[2px] rounded-full bg-emerald-400" />
+                                    <span className="voice-bar-3 h-2 w-[2px] rounded-full bg-emerald-400" />
+                                  </span>
+                                )}
                                 {st?.deafened ? (
                                   <HeadphoneOff className="h-3 w-3 text-rose-400" />
                                 ) : st?.muted ? (
@@ -333,8 +359,9 @@ export function Sidebar({
                                       e.stopPropagation();
                                       onWatchScreenShare(u.id);
                                     }}
-                                    className="rounded bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white hover:bg-rose-500"
+                                    className="inline-flex items-center gap-1 rounded-md bg-rose-600 px-1.5 py-0.5 text-[9px] font-bold uppercase text-white shadow-sm transition hover:bg-rose-500"
                                   >
+                                    <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-white" />
                                     AO VIVO
                                   </button>
                                 )}
@@ -342,8 +369,8 @@ export function Sidebar({
                             </div>
 
                             {!isMe && isVolumeOpen && (
-                              <div className="flex items-center gap-2 rounded-md bg-[#0f1117] px-2 py-1.5">
-                                <Volume2 className="h-3 w-3 shrink-0 text-slate-400" />
+                              <div className="flex items-center gap-2 rounded-lg border border-white/[0.06] bg-[#080a0f] px-2.5 py-1.5">
+                                <Volume2 className="h-3 w-3 shrink-0 text-indigo-400" />
                                 <input
                                   type="range"
                                   min={0}
@@ -352,9 +379,9 @@ export function Sidebar({
                                   onChange={(e) =>
                                     onSetUserVolume(u.id, Number(e.target.value))
                                   }
-                                  className="flex-1 accent-indigo-500"
+                                  className="concord-slider flex-1"
                                 />
-                                <span className="w-8 text-right text-[10px] tabular-nums text-slate-400">
+                                <span className="w-9 text-right font-mono text-[10px] tabular-nums text-slate-300">
                                   {vol}%
                                 </span>
                               </div>
@@ -376,8 +403,10 @@ export function Sidebar({
         <VoiceDock
           channel={connectedVoiceChannel}
           voiceState={voiceConnectionState}
+          connectedAt={connectedAt}
           screenSharing={screenSharing}
           viewingStage={viewingVoiceStage}
+          totalUnreadCount={totalUnreadCount}
           onToggleStage={onToggleVoiceStage}
           onStartScreenShare={onStartScreenShare}
           onStopScreenShare={onStopScreenShare}
@@ -385,14 +414,20 @@ export function Sidebar({
         />
       )}
 
-      {/* Rodapé do Usuário */}
-      <div className="flex items-center justify-between gap-1.5 border-t border-white/6 bg-[#0f1117]/80 px-2.5 py-2.5">
-        <div className="flex min-w-0 items-center gap-2">
+      {/* Rodapé / Dock do Usuário */}
+      <div className="mx-2 mb-2 flex items-center justify-between gap-1.5 rounded-xl border border-white/[0.07] bg-[#131724]/95 p-2 shadow-lg">
+        <button
+          type="button"
+          onClick={onOpenVoiceSettings}
+          title="Editar perfil e configurações de voz"
+          className="flex min-w-0 flex-1 items-center gap-2 rounded-lg p-1 text-left transition hover:bg-white/[0.06]"
+        >
           <Avatar
             displayName={currentUser.displayName}
             color={currentUser.avatarColor}
             size="sm"
             status="online"
+            ringBg="border-[#131724]"
           />
           <div className="min-w-0">
             <div className="truncate text-xs font-semibold text-white">
@@ -400,7 +435,7 @@ export function Sidebar({
             </div>
             <div className="truncate text-[10px] text-slate-400">@{currentUser.username}</div>
           </div>
-        </div>
+        </button>
 
         <div className="flex shrink-0 items-center gap-0.5">
           <button
@@ -409,8 +444,8 @@ export function Sidebar({
             title={muted ? 'Ativar microfone' : 'Mutar microfone'}
             className={`rounded-lg p-1.5 transition ${
               muted
-                ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
-                : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                ? 'bg-rose-500/20 text-rose-300 ring-1 ring-inset ring-rose-500/30 hover:bg-rose-500/30'
+                : 'text-slate-400 hover:bg-white/[0.08] hover:text-white'
             }`}
           >
             {muted ? <MicOff className="h-3.5 w-3.5" /> : <Mic className="h-3.5 w-3.5" />}
@@ -422,8 +457,8 @@ export function Sidebar({
             title={deafened ? 'Reativar áudio' : 'Ensurdecer (mutar saída e mic)'}
             className={`rounded-lg p-1.5 transition ${
               deafened
-                ? 'bg-rose-500/20 text-rose-300 hover:bg-rose-500/30'
-                : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                ? 'bg-rose-500/20 text-rose-300 ring-1 ring-inset ring-rose-500/30 hover:bg-rose-500/30'
+                : 'text-slate-400 hover:bg-white/[0.08] hover:text-white'
             }`}
           >
             {deafened ? (
@@ -436,8 +471,8 @@ export function Sidebar({
           <button
             type="button"
             onClick={onOpenVoiceSettings}
-            title="Configurações de voz, atalhos e atualizações"
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/8 hover:text-white"
+            title="Perfil, áudio, atalhos e atualizações"
+            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-white"
           >
             <Settings className="h-3.5 w-3.5" />
           </button>
@@ -448,8 +483,8 @@ export function Sidebar({
             title={mutedNotifications ? 'Ativar som de notificação' : 'Silenciar notificações'}
             className={`rounded-lg p-1.5 transition ${
               mutedNotifications
-                ? 'bg-amber-500/15 text-amber-300 hover:bg-amber-500/25'
-                : 'text-slate-400 hover:bg-white/8 hover:text-white'
+                ? 'bg-amber-500/15 text-amber-300 ring-1 ring-inset ring-amber-500/25 hover:bg-amber-500/25'
+                : 'text-slate-400 hover:bg-white/[0.08] hover:text-white'
             }`}
           >
             {mutedNotifications ? (

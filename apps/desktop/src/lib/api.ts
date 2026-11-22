@@ -134,6 +134,18 @@ export function createApiClient(baseUrl: string, token?: string) {
       return requestJson<{ users: UserPublic[] }>(cleanUrl, '/api/users', {}, token);
     },
 
+    updateProfile(body: {
+      displayName: string;
+      avatarColor: string;
+    }): Promise<{ user: UserPublic }> {
+      return requestJson<{ user: UserPublic }>(
+        cleanUrl,
+        '/api/users/me',
+        { method: 'PATCH', body: JSON.stringify(body) },
+        token,
+      );
+    },
+
     getInvites(): Promise<{ invites: InviteInfo[] }> {
       return requestJson<{ invites: InviteInfo[] }>(cleanUrl, '/api/invites', {}, token);
     },
@@ -250,6 +262,15 @@ export function createApiClient(baseUrl: string, token?: string) {
         cleanUrl,
         '/api/uploads',
         { method: 'POST', body: form },
+        token,
+      );
+    },
+
+    deleteUpload(attachmentId: string): Promise<{ ok: boolean }> {
+      return requestJson<{ ok: boolean }>(
+        cleanUrl,
+        `/api/uploads/${encodeURIComponent(attachmentId)}`,
+        { method: 'DELETE' },
         token,
       );
     },

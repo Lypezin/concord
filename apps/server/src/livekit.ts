@@ -12,24 +12,46 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 export interface LiveKitSupervisor {
   startedByUs: boolean;
   configPath: string | null;
+  nodeIp: string | null;
   stop: () => Promise<void>;
+}
+
+function isTailscaleCgnatIpv4(address: string): boolean {
+  const parts = address.split('.').map(Number);
+  if (parts.length !== 4) return false;
+  const [a, b] = parts;
+  return a === 100 && b !== undefined && b >= 64 && b <= 127;
 }
 
 export function detectTailscaleIpv4(): string | null {
   const interfaces = os.networkInterfaces();
+  // Pass 1: prefer explicit Tailscale interface
   for (const [name, addrs] of Object.entries(interfaces)) {
-    if (!addrs) continue;
+    if (!addrs || !/tailscale/i.test(name)) continue;
     for (const addr of addrs) {
-      if (addr.family !== 'IPv4' || addr.internal) continue;
-      const parts = addr.address.split('.').map(Number);
-      if (parts.length !== 4) continue;
-      const [a, b] = parts;
-      if (a === 100 && b !== undefined && b >= 64 && b <= 127) {
-        if (/tailscale/i.test(name) || parts[0] === 100) {
-          return addr.address;
-        }
+      if (addr.family === 'IPv4' && !addr.internal && isTailscaleCgnatIpv4(addr.address)) {
+        return addr.address;
       }
     }
+  }
+  // Pass 2: fallback to any non-internal 100.64.0.0/10 address
+  for (const addrs of Object.values(interfaces)) {
+    if (!addrs) continue;
+    for (const addr of addrs) {
+      if (addr.family === 'IPv4' && !addr.internal && isTailscaleCgnatIpv4(addr.address)) {
+        return addr.address;
+      }
+    }
+  }
+  return null;
+}
+
+export function resolveLiveKitNodeIp(config: ServerConfig): string | null {
+  if (config.livekitNodeIp && config.livekitNodeIp.trim().length > 0) {
+    return config.livekitNodeIp.trim();
+  }
+  if (config.host !== '127.0.0.1') {
+    return detectTailscaleIpv4();
   }
   return null;
 }
@@ -48,9 +70,13 @@ export function resolveLiveKitBinaryPath(): string | null {
   return null;
 }
 
-export function writeLiveKitConfig(config: ServerConfig, keys: LiveKitKeys): string {
+export function writeLiveKitConfig(config: ServerConfig, keys: LiveKitKeys): {
+  yamlPath: string;
+  nodeIp: string | null;
+} {
   fs.mkdirSync(config.dataDir, { recursive: true });
   const yamlPath = path.join(config.dataDir, 'livekit.yaml');
+  const nodeIp = resolveLiveKitNodeIp(config);
 
   const lines = [
     `port: ${config.livekitPort}`,
@@ -61,15 +87,15 @@ export function writeLiveKitConfig(config: ServerConfig, keys: LiveKitKeys): str
     '  use_external_ip: false',
   ];
 
-  if (config.livekitNodeIp && config.livekitNodeIp.trim().length > 0) {
-    lines.push(`  node_ip: "${config.livekitNodeIp.trim()}"`);
+  if (nodeIp) {
+    lines.push(`  node_ip: "${nodeIp}"`);
   }
 
   lines.push('keys:');
   lines.push(`  ${keys.apiKey}: "${keys.apiSecret}"`);
 
   fs.writeFileSync(yamlPath, `${lines.join('\n')}\n`, 'utf8');
-  return yamlPath;
+  return { yamlPath, nodeIp };
 }
 
 export async function checkLiveKitAvailable(port: number): Promise<boolean> {
@@ -119,10 +145,13 @@ export async function createLiveKitSupervisor(
   config: ServerConfig,
   keys: LiveKitKeys,
 ): Promise<LiveKitSupervisor> {
+  const resolvedNodeIp = resolveLiveKitNodeIp(config);
+
   if (!config.manageLiveKit) {
     return {
       startedByUs: false,
       configPath: null,
+      nodeIp: resolvedNodeIp,
       stop: async () => undefined,
     };
   }
@@ -135,20 +164,25 @@ export async function createLiveKitSupervisor(
     return {
       startedByUs: false,
       configPath: null,
+      nodeIp: resolvedNodeIp,
       stop: async () => undefined,
     };
   }
 
   const alreadyRunning = await checkLiveKitAvailable(config.livekitPort);
   if (alreadyRunning) {
+    console.warn(
+      `[Concord Server] Aviso: LiveKit já estava rodando na porta ${config.livekitPort} (reaproveitando processo existente). Se amigos tiverem problemas de voz, encerre instâncias antigas de livekit-server.exe e reinicie o servidor.`,
+    );
     return {
       startedByUs: false,
       configPath: null,
+      nodeIp: resolvedNodeIp,
       stop: async () => undefined,
     };
   }
 
-  const configPath = writeLiveKitConfig(config, keys);
+  const { yamlPath: configPath, nodeIp } = writeLiveKitConfig(config, keys);
   const child = spawn(binPath, ['--config', configPath], {
     stdio: ['ignore', 'pipe', 'pipe'],
     windowsHide: true,
@@ -184,6 +218,7 @@ export async function createLiveKitSupervisor(
   return {
     startedByUs: true,
     configPath,
+    nodeIp,
     stop: () => stopChildProcess(child),
   };
 }

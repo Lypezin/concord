@@ -499,6 +499,71 @@ async function run(): Promise<void> {
     });
     await voiceLeaveEv;
 
+    // 18. Edicao de perfil em tempo real (PATCH /api/users/me -> user:updated)
+    const userUpdatedEv = waitForEvent(
+      sock2,
+      'user:updated',
+      (u) => u.id === adminId && u.displayName === 'Luiz Atualizado',
+    );
+    const profileRes = await apiJson<{ user: UserPublic }>(
+      baseUrl,
+      '/api/users/me',
+      {
+        method: 'PATCH',
+        body: JSON.stringify({ displayName: 'Luiz Atualizado', avatarColor: '#10b981' }),
+      },
+      adminToken,
+    );
+    assert.equal(profileRes.status, 200);
+    assert.equal(profileRes.data.user.avatarColor, '#10b981');
+    await userUpdatedEv;
+
+    // 19. DELETE /api/uploads/:id (anexo pendente cancelado + bloqueio outro usuario)
+    const orphanForm = new FormData();
+    orphanForm.append('file', new Blob([TINY_PNG], { type: 'image/png' }), 'cancelado.png');
+    const orphanUpload = await apiJson<{
+      attachment: { id: string; filename: string };
+    }>(baseUrl, '/api/uploads', { method: 'POST', body: orphanForm }, adminToken);
+    assert.equal(orphanUpload.status, 201);
+
+    const forbiddenDeleteUpload = await apiJson<{ error: string }>(
+      baseUrl,
+      `/api/uploads/${orphanUpload.data.attachment.id}`,
+      { method: 'DELETE' },
+      friend1Token,
+    );
+    assert.equal(forbiddenDeleteUpload.status, 403);
+
+    const deleteUploadRes = await apiJson<{ ok: boolean }>(
+      baseUrl,
+      `/api/uploads/${orphanUpload.data.attachment.id}`,
+      { method: 'DELETE' },
+      adminToken,
+    );
+    assert.equal(deleteUploadRes.status, 200);
+    await assert.rejects(
+      fs.access(path.join(server.config.uploadsDir, orphanUpload.data.attachment.filename)),
+    );
+
+    // 20. Duplo toggle concorrente de reacao sem falha SQLite
+    const targetMsgId = page2.data.messages[0]!.id;
+    const [r1, r2] = await Promise.all([
+      apiJson<{ message: Message }>(
+        baseUrl,
+        `/api/messages/${targetMsgId}/reactions`,
+        { method: 'POST', body: JSON.stringify({ emoji: '👍' }) },
+        adminToken,
+      ),
+      apiJson<{ message: Message }>(
+        baseUrl,
+        `/api/messages/${targetMsgId}/reactions`,
+        { method: 'POST', body: JSON.stringify({ emoji: '👍' }) },
+        adminToken,
+      ),
+    ]);
+    assert.equal(r1.status, 200);
+    assert.equal(r2.status, 200);
+
     console.log('✅ Todos os testes de integração do Concord Server passaram com sucesso!');
   } finally {
     for (const sock of sockets) {

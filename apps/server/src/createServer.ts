@@ -18,7 +18,7 @@ import { registerChannelRoutes } from './routes/channels.js';
 import type { RouteContext } from './routes/helpers.js';
 import { registerInviteRoutes } from './routes/invites.js';
 import { registerMessageRoutes } from './routes/messages.js';
-import { registerUploadRoutes } from './routes/uploads.js';
+import { cleanupOrphanUploads, registerUploadRoutes } from './routes/uploads.js';
 import { registerUserRoutes } from './routes/users.js';
 import { registerVoiceRoutes } from './routes/voice.js';
 
@@ -37,6 +37,7 @@ export async function createConcordServer(options: ServerOptions = {}): Promise<
   const secret = getOrCreateSecret(config.dataDir);
   const livekitKeys = getOrCreateLiveKitKeys(config.dataDir);
   const db = createDatabase(config.dataDir, config.uploadsDir);
+  cleanupOrphanUploads(db, config.uploadsDir);
   const livekit = await createLiveKitSupervisor(config, livekitKeys);
 
   const fastify = Fastify({
