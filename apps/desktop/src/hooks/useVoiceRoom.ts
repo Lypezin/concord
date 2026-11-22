@@ -302,7 +302,26 @@ export function useVoiceRoom(options: {
       }
     }
 
-    setScreenShares(shares);
+    setScreenShares((prev) => {
+      if (
+        prev.length === shares.length &&
+        prev.every((item, idx) => {
+          const next = shares[idx];
+          return (
+            next &&
+            item.id === next.id &&
+            item.participantId === next.participantId &&
+            item.participantName === next.participantName &&
+            item.videoTrack === next.videoTrack &&
+            item.hasAudio === next.hasAudio &&
+            item.isLocal === next.isLocal
+          );
+        })
+      ) {
+        return prev;
+      }
+      return shares;
+    });
   }, []);
 
   const stopScreenShareInternal = useCallback(async () => {
@@ -819,8 +838,8 @@ export function useVoiceRoom(options: {
       }
 
       const videoConstraints: MediaTrackConstraints = {
-        width: { ideal: preset.width },
-        height: { ideal: preset.height },
+        width: { ideal: preset.width, max: preset.width },
+        height: { ideal: preset.height, max: preset.height },
         frameRate: { ideal: opts.fps, max: opts.fps },
       };
 
@@ -856,14 +875,6 @@ export function useVoiceRoom(options: {
           throw new Error('Nenhuma faixa de vídeo retornada pelo sistema.');
         }
 
-        await rawVideo
-          .applyConstraints({
-            width: { ideal: preset.width, max: preset.width },
-            height: { ideal: preset.height, max: preset.height },
-            frameRate: { ideal: opts.fps, max: opts.fps },
-          })
-          .catch(() => undefined);
-
         rawVideo.contentHint = opts.contentHint;
 
         const localVideo = new LocalVideoTrack(rawVideo, undefined, false);
@@ -889,27 +900,6 @@ export function useVoiceRoom(options: {
           },
           degradationPreference: degradationPref,
         });
-
-        // Trava parâmetros do RTCRtpSender sem downscale e com frameRate máximo
-        try {
-          const sender = localVideo.sender;
-          if (sender) {
-            const params = sender.getParameters();
-            if (params.encodings && params.encodings.length > 0) {
-              for (const enc of params.encodings) {
-                enc.maxBitrate = targetBitrate;
-                enc.maxFramerate = opts.fps;
-                enc.scaleResolutionDownBy = 1;
-                enc.priority = 'high';
-                enc.networkPriority = 'high';
-              }
-              params.degradationPreference = degradationPref;
-              await sender.setParameters(params).catch(() => undefined);
-            }
-          }
-        } catch {
-          // ignore if browser/driver does not allow direct sender param mutation
-        }
 
         const rawAudio = stream.getAudioTracks()[0];
         if (rawAudio) {

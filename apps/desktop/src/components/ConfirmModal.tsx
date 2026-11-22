@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
-import { AlertTriangle, Loader2, X } from 'lucide-react';
+import { useState } from 'react';
+import { AlertTriangle, Loader2 } from 'lucide-react';
+import { ModalDialog } from './ui/Dialog.js';
 
 interface ConfirmModalProps {
   title: string;
@@ -20,16 +21,6 @@ export function ConfirmModal({
 }: ConfirmModalProps) {
   const [busy, setBusy] = useState(false);
 
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === 'Escape' && !busy) {
-        onClose();
-      }
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [busy, onClose]);
-
   async function handleConfirm() {
     setBusy(true);
     try {
@@ -41,40 +32,20 @@ export function ConfirmModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-      onClick={() => {
-        if (!busy) onClose();
-      }}
+    <ModalDialog
+      onClose={onClose}
+      title={title}
+      icon={danger ? <AlertTriangle className="h-4 w-4 text-rose-400" /> : undefined}
+      maxWidthClass="max-w-sm"
+      preventClose={busy}
     >
-      <div
-        className="concord-panel animate-modal-in w-full max-w-sm overflow-hidden rounded-xl border border-white/[0.09] bg-[#16161b] p-5"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <div className="mb-3 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            {danger && <AlertTriangle className="h-4 w-4 text-rose-400" />}
-            <h2 className="text-sm font-semibold text-white">{title}</h2>
-          </div>
-          <button
-            type="button"
-            onClick={() => {
-              if (!busy) onClose();
-            }}
-            className="rounded-lg p-1 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
-        </div>
-
+      <div className="p-5">
         <p className="mb-5 text-xs leading-relaxed text-zinc-300">{message}</p>
 
         <div className="flex justify-end gap-2">
           <button
             type="button"
-            onClick={() => {
-              if (!busy) onClose();
-            }}
+            onClick={onClose}
             disabled={busy}
             className="rounded-lg px-3.5 py-1.5 text-xs font-medium text-zinc-400 transition hover:bg-white/[0.06] hover:text-zinc-200 disabled:opacity-50"
           >
@@ -95,6 +66,6 @@ export function ConfirmModal({
           </button>
         </div>
       </div>
-    </div>
+    </ModalDialog>
   );
 }

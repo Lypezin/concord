@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { UserPublic } from '@concord/shared';
 import {
   AlertCircle,
@@ -14,7 +14,6 @@ import {
   SlidersHorizontal,
   User,
   Volume2,
-  X,
 } from 'lucide-react';
 import type { TailscaleStatus, UpdaterStatus } from '../bridge-types.js';
 import {
@@ -22,6 +21,10 @@ import {
   type VoiceAudioSettings,
 } from '../lib/audioSettings.js';
 import { Avatar } from './Avatar.js';
+import { ModalDialog } from './ui/Dialog.js';
+import { Select } from './ui/Select.js';
+import { Switch } from './ui/Switch.js';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/Tabs.js';
 
 const AVATAR_PALETTE = [
   '#5865f2',
@@ -58,33 +61,6 @@ function keyEventToAccelerator(e: React.KeyboardEvent<HTMLInputElement>): string
   return parts.join('+');
 }
 
-interface ToggleSwitchProps {
-  checked: boolean;
-  onToggle: () => void;
-}
-
-function ToggleSwitch({ checked, onToggle }: ToggleSwitchProps) {
-  return (
-    <button
-      type="button"
-      role="switch"
-      aria-checked={checked}
-      onClick={onToggle}
-      className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition ${
-        checked
-          ? 'border-transparent bg-[#23a55a]'
-          : 'border-white/10 bg-white/10'
-      }`}
-    >
-      <span
-        className={`inline-block h-3.5 w-3.5 rounded-full bg-white shadow transition-transform ${
-          checked ? 'translate-x-4' : 'translate-x-0.5'
-        }`}
-      />
-    </button>
-  );
-}
-
 export function VoiceSettingsModal({
   currentUser,
   settings,
@@ -93,6 +69,7 @@ export function VoiceSettingsModal({
   onUpdateSettings,
   onClose,
 }: VoiceSettingsModalProps) {
+  const [activeTab, setActiveTab] = useState<'audio' | 'profile' | 'shortcuts' | 'system'>('audio');
   const [displayName, setDisplayName] = useState(currentUser.displayName);
   const [avatarColor, setAvatarColor] = useState(currentUser.avatarColor);
   const [savingProfile, setSavingProfile] = useState(false);
@@ -110,7 +87,7 @@ export function VoiceSettingsModal({
   const loopbackGainRef = useRef<GainNode | null>(null);
 
   const [tailscaleStatus, setTailscaleStatus] = useState<TailscaleStatus | null>(null);
-  const [appVersion, setAppVersion] = useState<string>('0.4.0');
+  const [appVersion, setAppVersion] = useState<string>('0.5.0');
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
 
@@ -152,23 +129,32 @@ export function VoiceSettingsModal({
   }, [hearSelf]);
 
   useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key !== 'Escape') return;
-      const target = e.target as HTMLElement | null;
-      if (target?.dataset?.shortcutCapture === 'true') {
-        return;
-      }
-      onClose();
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
-
-  useEffect(() => {
     return () => {
       micTestCleanupRef.current?.();
     };
   }, []);
+
+  const inputOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set('default', 'Padrão do Windows');
+    inputs.forEach((dev, i) => {
+      if (dev.deviceId && !map.has(dev.deviceId)) {
+        map.set(dev.deviceId, dev.label || `Microfone ${i + 1}`);
+      }
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+  }, [inputs]);
+
+  const outputOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    map.set('default', 'Padrão do Windows');
+    outputs.forEach((dev, i) => {
+      if (dev.deviceId && !map.has(dev.deviceId)) {
+        map.set(dev.deviceId, dev.label || `Saída ${i + 1}`);
+      }
+    });
+    return Array.from(map.entries()).map(([value, label]) => ({ value, label }));
+  }, [outputs]);
 
   async function toggleMicTest(): Promise<void> {
     setMicError(null);
@@ -303,401 +289,419 @@ export function VoiceSettingsModal({
   }
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
-      onClick={onClose}
+    <ModalDialog
+      onClose={onClose}
+      title="Configurações"
+      icon={<SlidersHorizontal className="h-4 w-4" />}
+      maxWidthClass="max-w-xl"
     >
-      <div
-        className="concord-panel animate-modal-in flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#16161b]"
-        onClick={(e) => e.stopPropagation()}
+      <Tabs
+        value={activeTab}
+        onValueChange={(val) =>
+          setActiveTab(val as 'audio' | 'profile' | 'shortcuts' | 'system')
+        }
+        className="flex min-h-0 flex-1 flex-col"
       >
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-3.5">
-          <div className="flex items-center gap-2.5">
-            <SlidersHorizontal className="h-4 w-4 text-zinc-300" />
-            <h2 className="text-sm font-semibold text-white">
-              Configurações
-            </h2>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
-          >
-            <X className="h-4 w-4" />
-          </button>
+        <div className="border-b border-white/[0.07] bg-[#131317] px-5 py-2.5">
+          <TabsList className="grid w-full grid-cols-4">
+            <TabsTrigger value="audio">
+              <Volume2 className="h-3.5 w-3.5" />
+              <span>Voz & Áudio</span>
+            </TabsTrigger>
+            <TabsTrigger value="profile">
+              <User className="h-3.5 w-3.5" />
+              <span>Perfil</span>
+            </TabsTrigger>
+            <TabsTrigger value="shortcuts">
+              <Keyboard className="h-3.5 w-3.5" />
+              <span>Atalhos</span>
+            </TabsTrigger>
+            <TabsTrigger value="system">
+              <Shield className="h-3.5 w-3.5" />
+              <span>Sistema</span>
+            </TabsTrigger>
+          </TabsList>
         </div>
 
-        <div className="flex-1 space-y-4 overflow-y-auto p-5">
-          {/* Meu Perfil */}
-          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
-            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-              <User className="h-3.5 w-3.5" />
-              Perfil
-            </div>
-
-            <div className="flex items-center gap-3">
-              <Avatar
-                displayName={displayName || currentUser.displayName}
-                color={avatarColor}
-                size="lg"
-                ringBg="border-[#101013]"
-              />
-              <div className="flex flex-1 gap-2">
-                <input
-                  type="text"
-                  maxLength={32}
-                  value={displayName}
-                  onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Nome exibido"
-                  className="flex-1 rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 text-xs text-zinc-100 transition focus:border-white/[0.22] focus:outline-none"
-                />
-                <button
-                  type="button"
-                  onClick={() => void handleSaveProfile()}
-                  disabled={savingProfile}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#5865f2] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
-                >
-                  {savingProfile ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : profileSaved ? (
-                    <Check className="h-3.5 w-3.5 text-emerald-300" />
-                  ) : null}
-                  {profileSaved ? 'Salvo' : 'Salvar'}
-                </button>
+        <div className="flex-1 overflow-y-auto p-5">
+          {/* ABA 1: VOZ & ÁUDIO */}
+          <TabsContent value="audio" className="space-y-4">
+            <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                Dispositivos de Áudio
               </div>
-            </div>
 
-            <div className="flex items-center gap-2.5 pt-0.5">
-              <span className="text-[11px] text-zinc-400">Cor do avatar:</span>
-              <div className="flex flex-wrap gap-2">
-                {AVATAR_PALETTE.map((color) => (
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-zinc-300">
+                  <Mic className="h-3.5 w-3.5 text-zinc-400" />
+                  Microfone (Entrada)
+                </label>
+                <Select
+                  value={settings.inputDeviceId}
+                  onValueChange={(value) =>
+                    void onUpdateSettings({ ...settings, inputDeviceId: value })
+                  }
+                  options={inputOptions}
+                />
+              </div>
+
+              <div>
+                <label className="mb-1.5 flex items-center gap-1.5 text-xs font-medium text-zinc-300">
+                  <Volume2 className="h-3.5 w-3.5 text-zinc-400" />
+                  Fone / Caixa de Som (Saída)
+                </label>
+                <Select
+                  value={settings.outputDeviceId}
+                  onValueChange={(value) =>
+                    void onUpdateSettings({ ...settings, outputDeviceId: value })
+                  }
+                  options={outputOptions}
+                />
+              </div>
+
+              {/* Medidor de Microfone */}
+              <div className="space-y-2.5 border-t border-white/[0.06] pt-3">
+                <div className="flex items-center gap-2">
                   <button
-                    key={color}
                     type="button"
-                    onClick={() => setAvatarColor(color)}
-                    className={`h-5 w-5 rounded-full transition ${
-                      avatarColor === color
-                        ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#101013]'
-                        : 'opacity-75 hover:opacity-100'
+                    onClick={() => void toggleMicTest()}
+                    className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
+                      testingMic
+                        ? 'border-rose-500/30 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
+                        : 'border-white/[0.08] bg-[#202027] text-zinc-200 hover:bg-[#292932]'
                     }`}
-                    style={{ backgroundColor: color }}
-                  />
-                ))}
-              </div>
-            </div>
+                  >
+                    {testingMic ? 'Parar Teste' : 'Testar Microfone'}
+                  </button>
 
-            {profileError && (
-              <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-200">
-                {profileError}
-              </div>
-            )}
-          </div>
+                  <button
+                    type="button"
+                    onClick={() => setHearSelf((prev) => !prev)}
+                    className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                      hearSelf
+                        ? 'border-white/[0.18] bg-[#26262f] text-white'
+                        : 'border-white/[0.07] bg-[#16161b] text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    <Headphones className="h-3.5 w-3.5" />
+                    Ouvir retorno
+                  </button>
 
-          {/* Dispositivos de Áudio */}
-          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-              Dispositivos de Áudio
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 text-xs text-zinc-300">
-                <Mic className="h-3.5 w-3.5 text-zinc-400" />
-                Microfone (Entrada)
-              </label>
-              <select
-                value={settings.inputDeviceId}
-                onChange={(e) =>
-                  void onUpdateSettings({ ...settings, inputDeviceId: e.target.value })
-                }
-                className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-2.5 py-2 text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
-              >
-                <option value="default">Padrão do Windows</option>
-                {inputs.map((dev, i) => (
-                  <option key={dev.deviceId || i} value={dev.deviceId}>
-                    {dev.label || `Microfone ${i + 1}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            <div>
-              <label className="mb-1 flex items-center gap-1.5 text-xs text-zinc-300">
-                <Volume2 className="h-3.5 w-3.5 text-zinc-400" />
-                Fone / Caixa de Som (Saída)
-              </label>
-              <select
-                value={settings.outputDeviceId}
-                onChange={(e) =>
-                  void onUpdateSettings({ ...settings, outputDeviceId: e.target.value })
-                }
-                className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-2.5 py-2 text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
-              >
-                <option value="default">Padrão do Windows</option>
-                {outputs.map((dev, i) => (
-                  <option key={dev.deviceId || i} value={dev.deviceId}>
-                    {dev.label || `Saída ${i + 1}`}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Medidor de Microfone */}
-            <div className="space-y-2.5 pt-1">
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => void toggleMicTest()}
-                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
-                    testingMic
-                      ? 'border-rose-500/30 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
-                      : 'border-white/[0.08] bg-[#202027] text-zinc-200 hover:bg-[#292932]'
-                  }`}
-                >
-                  {testingMic ? 'Parar Teste' : 'Testar Microfone'}
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setHearSelf((prev) => !prev)}
-                  title="Ouvir o retorno da sua própria voz durante o teste"
-                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${
-                    hearSelf
-                      ? 'border-white/[0.18] bg-[#26262f] text-white'
-                      : 'border-white/[0.07] bg-[#16161b] text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  <Headphones className="h-3.5 w-3.5" />
-                  Ouvir retorno
-                </button>
-
-                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#0c0c0e]">
-                  <div
-                    className="h-full rounded-full bg-[#23a55a] transition-all duration-75"
-                    style={{ width: `${micLevel}%` }}
-                  />
+                  <div className="h-2.5 flex-1 overflow-hidden rounded-full border border-white/[0.06] bg-[#0c0c0e]">
+                    <div
+                      className="h-full rounded-full bg-[#23a55a] transition-all duration-75"
+                      style={{ width: `${micLevel}%` }}
+                    />
+                  </div>
                 </div>
+
+                {micError && (
+                  <div className="flex items-start gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-200">
+                    <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
+                    <span>{micError}</span>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            {/* Processamento de Voz */}
+            <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+              <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                Processamento de Voz
               </div>
 
-              {micError && (
-                <div className="flex items-start gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-200">
-                  <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0 text-rose-400" />
-                  <span>{micError}</span>
+              <div className="flex items-center justify-between gap-3 py-0.5">
+                <div>
+                  <div className="text-xs font-medium text-zinc-200">
+                    Supressão de ruído (RNNoise)
+                  </div>
+                  <div className="text-[11px] text-zinc-500">
+                    Filtra som de teclado mecânico, cooler e ruídos de fundo em 48 kHz
+                  </div>
                 </div>
-              )}
-            </div>
-          </div>
-
-          {/* Processamento de Voz */}
-          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
-            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-              Processamento de Voz
-            </div>
-
-            <div className="flex items-center justify-between gap-3 py-0.5">
-              <div>
-                <div className="text-xs font-medium text-zinc-200">
-                  Supressão de ruído (RNNoise)
-                </div>
-                <div className="text-[11px] text-zinc-500">
-                  Reduz ruídos de teclado, ventilador e ambiente
-                </div>
+                <Switch
+                  checked={settings.rnnoiseEnabled}
+                  onCheckedChange={(checked) =>
+                    void onUpdateSettings({ ...settings, rnnoiseEnabled: checked })
+                  }
+                />
               </div>
-              <ToggleSwitch
-                checked={settings.rnnoiseEnabled}
-                onToggle={() =>
-                  void onUpdateSettings({ ...settings, rnnoiseEnabled: !settings.rnnoiseEnabled })
-                }
-              />
-            </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2.5">
-              <div className="text-xs font-medium text-zinc-200">Cancelamento de Eco</div>
-              <ToggleSwitch
-                checked={settings.echoCancellation}
-                onToggle={() =>
-                  void onUpdateSettings({
-                    ...settings,
-                    echoCancellation: !settings.echoCancellation,
-                  })
-                }
-              />
-            </div>
-
-            <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2.5">
-              <div className="text-xs font-medium text-zinc-200">
-                Controle Automático de Ganho (AGC)
+              <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2.5">
+                <div>
+                  <div className="text-xs font-medium text-zinc-200">Cancelamento de Eco</div>
+                  <div className="text-[11px] text-zinc-500">
+                    Impede que o som das caixas retorne pelo microfone
+                  </div>
+                </div>
+                <Switch
+                  checked={settings.echoCancellation}
+                  onCheckedChange={(checked) =>
+                    void onUpdateSettings({
+                      ...settings,
+                      echoCancellation: checked,
+                    })
+                  }
+                />
               </div>
-              <ToggleSwitch
-                checked={settings.autoGainControl}
-                onToggle={() =>
-                  void onUpdateSettings({
-                    ...settings,
-                    autoGainControl: !settings.autoGainControl,
-                  })
-                }
-              />
-            </div>
-          </div>
 
-          {/* Atalhos Globais */}
-          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
-            <div className="flex items-center justify-between">
+              <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2.5">
+                <div>
+                  <div className="text-xs font-medium text-zinc-200">
+                    Controle Automático de Ganho (AGC)
+                  </div>
+                  <div className="text-[11px] text-zinc-500">
+                    Mantém o volume da sua voz equilibrado automaticamente
+                  </div>
+                </div>
+                <Switch
+                  checked={settings.autoGainControl}
+                  onCheckedChange={(checked) =>
+                    void onUpdateSettings({
+                      ...settings,
+                      autoGainControl: checked,
+                    })
+                  }
+                />
+              </div>
+            </div>
+          </TabsContent>
+
+          {/* ABA 2: PERFIL */}
+          <TabsContent value="profile" className="space-y-4">
+            <div className="space-y-4 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
               <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
-                <Keyboard className="h-3.5 w-3.5" />
-                Atalhos Globais (em jogos)
-              </div>
-              <button
-                type="button"
-                onClick={() =>
-                  void onUpdateSettings({
-                    ...settings,
-                    shortcuts: { ...DEFAULT_VOICE_SETTINGS.shortcuts },
-                  })
-                }
-                className="text-[11px] font-medium text-zinc-300 hover:underline"
-              >
-                Restaurar padrão
-              </button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="mb-1 block text-[11px] text-zinc-400">
-                  Mutar / Desmutar Mic
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  data-shortcut-capture="true"
-                  value={settings.shortcuts.toggleMute}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.currentTarget.blur();
-                      return;
-                    }
-                    e.preventDefault();
-                    const combo = keyEventToAccelerator(e);
-                    if (combo) {
-                      void onUpdateSettings({
-                        ...settings,
-                        shortcuts: { ...settings.shortcuts, toggleMute: combo },
-                      });
-                    }
-                  }}
-                  title="Clique e pressione uma combinação (ex: Ctrl+Shift+M)"
-                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
-                />
+                <User className="h-3.5 w-3.5" />
+                Identidade no Servidor
               </div>
 
-              <div>
-                <label className="mb-1 block text-[11px] text-zinc-400">
-                  Ensurdecer (Deafen)
-                </label>
-                <input
-                  type="text"
-                  readOnly
-                  data-shortcut-capture="true"
-                  value={settings.shortcuts.toggleDeafen}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') {
-                      e.preventDefault();
-                      e.stopPropagation();
-                      e.currentTarget.blur();
-                      return;
-                    }
-                    e.preventDefault();
-                    const combo = keyEventToAccelerator(e);
-                    if (combo) {
-                      void onUpdateSettings({
-                        ...settings,
-                        shortcuts: { ...settings.shortcuts, toggleDeafen: combo },
-                      });
-                    }
-                  }}
-                  title="Clique e pressione uma combinação (ex: Ctrl+Shift+D)"
-                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
+              <div className="flex items-center gap-3.5">
+                <Avatar
+                  displayName={displayName || currentUser.displayName}
+                  color={avatarColor}
+                  size="lg"
+                  ringBg="border-[#101013]"
                 />
+                <div className="flex flex-1 gap-2">
+                  <input
+                    type="text"
+                    maxLength={32}
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="Nome exibido"
+                    className="flex-1 rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 text-xs text-zinc-100 transition focus:border-white/[0.22] focus:outline-none"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => void handleSaveProfile()}
+                    disabled={savingProfile}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#5865f2] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
+                  >
+                    {savingProfile ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : profileSaved ? (
+                      <Check className="h-3.5 w-3.5 text-emerald-300" />
+                    ) : null}
+                    {profileSaved ? 'Salvo' : 'Salvar'}
+                  </button>
+                </div>
               </div>
-            </div>
-            <p className="text-[10px] text-zinc-500">
-              Clique no campo e pressione uma combinação com Ctrl, Alt ou Shift + tecla.
-            </p>
-            {shortcutStatus &&
-              (!shortcutStatus.toggleMute || !shortcutStatus.toggleDeafen) && (
-                <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
-                  <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
-                  <span>
-                    Atalho em conflito com outro programa (
-                    {!shortcutStatus.toggleMute ? 'Mute' : ''}
-                    {!shortcutStatus.toggleMute && !shortcutStatus.toggleDeafen ? ' e ' : ''}
-                    {!shortcutStatus.toggleDeafen ? 'Ensurdecer' : ''}
-                    ). Escolha outra combinação.
-                  </span>
+
+              <div className="space-y-2 border-t border-white/[0.06] pt-3">
+                <span className="block text-xs font-medium text-zinc-300">Cor do Avatar</span>
+                <div className="flex flex-wrap gap-2.5">
+                  {AVATAR_PALETTE.map((color) => (
+                    <button
+                      key={color}
+                      type="button"
+                      onClick={() => setAvatarColor(color)}
+                      className={`h-6 w-6 rounded-full transition ${
+                        avatarColor === color
+                          ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#101013]'
+                          : 'opacity-75 hover:opacity-100'
+                      }`}
+                      style={{ backgroundColor: color }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              {profileError && (
+                <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-2.5 py-1.5 text-[11px] text-rose-200">
+                  {profileError}
                 </div>
               )}
-          </div>
-
-          {/* Tailscale e Atualizações */}
-          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4 text-xs">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-zinc-300">
-                <Shield className="h-4 w-4 text-zinc-400" />
-                <span>Rede Tailscale</span>
-              </div>
-              {tailscaleStatus ? (
-                tailscaleStatus.connected ? (
-                  <span className="inline-flex items-center gap-1 font-medium text-emerald-400">
-                    <CheckCircle2 className="h-3.5 w-3.5" />
-                    Conectado ({tailscaleStatus.selfIp})
-                  </span>
-                ) : tailscaleStatus.installed ? (
-                  <span className="text-amber-300">Instalado (desconectado)</span>
-                ) : (
-                  <span className="text-zinc-500">Não instalado</span>
-                )
-              ) : (
-                <span className="text-zinc-500">Verificando...</span>
-              )}
             </div>
+          </TabsContent>
 
-            <div className="flex items-center justify-between border-t border-white/[0.06] pt-3">
-              <div>
-                <div className="font-semibold text-zinc-200">Concord v{appVersion}</div>
-                {updaterStatus?.message && (
-                  <div className="text-[11px] text-zinc-400">{updaterStatus.message}</div>
+          {/* ABA 3: ATALHOS GLOBAIS */}
+          <TabsContent value="shortcuts" className="space-y-4">
+            <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                  <Keyboard className="h-3.5 w-3.5" />
+                  Atalhos Globais (funcionam dentro de jogos)
+                </div>
+                <button
+                  type="button"
+                  onClick={() =>
+                    void onUpdateSettings({
+                      ...settings,
+                      shortcuts: { ...DEFAULT_VOICE_SETTINGS.shortcuts },
+                    })
+                  }
+                  className="text-[11px] font-medium text-zinc-300 hover:underline"
+                >
+                  Restaurar padrão
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+                    Mutar / Desmutar Microfone
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    data-shortcut-capture="true"
+                    value={settings.shortcuts.toggleMute}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.blur();
+                        return;
+                      }
+                      e.preventDefault();
+                      const combo = keyEventToAccelerator(e);
+                      if (combo) {
+                        void onUpdateSettings({
+                          ...settings,
+                          shortcuts: { ...settings.shortcuts, toggleMute: combo },
+                        });
+                      }
+                    }}
+                    className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-[#5865f2] focus:outline-none"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-1.5 block text-xs font-medium text-zinc-300">
+                    Ensurdecer (Deafen)
+                  </label>
+                  <input
+                    type="text"
+                    readOnly
+                    data-shortcut-capture="true"
+                    value={settings.shortcuts.toggleDeafen}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        e.stopPropagation();
+                        e.currentTarget.blur();
+                        return;
+                      }
+                      e.preventDefault();
+                      const combo = keyEventToAccelerator(e);
+                      if (combo) {
+                        void onUpdateSettings({
+                          ...settings,
+                          shortcuts: { ...settings.shortcuts, toggleDeafen: combo },
+                        });
+                      }
+                    }}
+                    className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-[#5865f2] focus:outline-none"
+                  />
+                </div>
+              </div>
+
+              <p className="text-[11px] text-zinc-500">
+                Clique em um campo acima e pressione uma combinação com Ctrl, Alt ou Shift + tecla.
+              </p>
+
+              {shortcutStatus &&
+                (!shortcutStatus.toggleMute || !shortcutStatus.toggleDeafen) && (
+                  <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                    <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
+                    <span>
+                      Atalho em conflito com outro aplicativo (
+                      {!shortcutStatus.toggleMute ? 'Mute' : ''}
+                      {!shortcutStatus.toggleMute && !shortcutStatus.toggleDeafen ? ' e ' : ''}
+                      {!shortcutStatus.toggleDeafen ? 'Ensurdecer' : ''}
+                      ). Escolha outra combinação.
+                    </span>
+                  </div>
+                )}
+            </div>
+          </TabsContent>
+
+          {/* ABA 4: SISTEMA E ATUALIZAÇÕES */}
+          <TabsContent value="system" className="space-y-4">
+            <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4 text-xs">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2 text-zinc-300">
+                  <Shield className="h-4 w-4 text-zinc-400" />
+                  <div>
+                    <div className="font-medium text-zinc-200">Rede Privada Tailscale</div>
+                    <div className="text-[11px] text-zinc-500">
+                      Conexão criptografada ponto a ponto entre os amigos
+                    </div>
+                  </div>
+                </div>
+                {tailscaleStatus ? (
+                  tailscaleStatus.connected ? (
+                    <span className="inline-flex items-center gap-1 rounded-md border border-emerald-500/20 bg-emerald-500/10 px-2.5 py-1 font-medium text-emerald-400">
+                      <CheckCircle2 className="h-3.5 w-3.5" />
+                      {tailscaleStatus.selfIp}
+                    </span>
+                  ) : tailscaleStatus.installed ? (
+                    <span className="text-amber-300">Instalado (desconectado)</span>
+                  ) : (
+                    <span className="text-zinc-500">Não instalado</span>
+                  )
+                ) : (
+                  <span className="text-zinc-500">Verificando...</span>
                 )}
               </div>
 
-              {updaterStatus?.state === 'downloaded' ? (
-                <button
-                  type="button"
-                  onClick={() => void window.concordAPI?.installUpdate()}
-                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#23a55a] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-[#1e8e4d]"
-                >
-                  <Download className="h-3.5 w-3.5" />
-                  Reiniciar e Instalar v{updaterStatus.version}
-                </button>
-              ) : (
-                <button
-                  type="button"
-                  onClick={() => void handleCheckUpdates()}
-                  disabled={checkingUpdates}
-                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#202027] px-3 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:bg-[#292932] disabled:opacity-50"
-                >
-                  {checkingUpdates ? (
-                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                  ) : (
-                    <RefreshCw className="h-3.5 w-3.5" />
-                  )}
-                  Buscar Atualização
-                </button>
-              )}
+              <div className="flex items-center justify-between border-t border-white/[0.06] pt-3">
+                <div>
+                  <div className="font-semibold text-zinc-200">Concord v{appVersion}</div>
+                  <div className="text-[11px] text-zinc-400">
+                    {updaterStatus?.message || 'Atualizações automáticas via GitHub Releases'}
+                  </div>
+                </div>
+
+                {updaterStatus?.state === 'downloaded' ? (
+                  <button
+                    type="button"
+                    onClick={() => void window.concordAPI?.installUpdate()}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-[#23a55a] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-[#1e8e4d]"
+                  >
+                    <Download className="h-3.5 w-3.5" />
+                    Reiniciar e Instalar v{updaterStatus.version}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => void handleCheckUpdates()}
+                    disabled={checkingUpdates}
+                    className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#202027] px-3 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:bg-[#292932] disabled:opacity-50"
+                  >
+                    {checkingUpdates ? (
+                      <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                    ) : (
+                      <RefreshCw className="h-3.5 w-3.5" />
+                    )}
+                    Buscar Atualização
+                  </button>
+                )}
+              </div>
             </div>
-          </div>
+          </TabsContent>
         </div>
-      </div>
-    </div>
+      </Tabs>
+    </ModalDialog>
   );
 }

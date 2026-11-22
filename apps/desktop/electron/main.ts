@@ -202,15 +202,23 @@ function setupPermissionHandlers(): void {
 function setupDisplayMediaHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {
-      const sources = await desktopCapturer.getSources({
-        types: ['screen', 'window'],
-        thumbnailSize: { width: 16, height: 16 },
-      });
       const selection =
         pendingScreenSelection && Date.now() - pendingScreenSelection.createdAt < 15000
           ? pendingScreenSelection
           : null;
       pendingScreenSelection = null;
+
+      const requestedTypes: Array<'screen' | 'window'> = selection?.sourceId.startsWith('window:')
+        ? ['window']
+        : selection?.sourceId.startsWith('screen:')
+          ? ['screen']
+          : ['screen', 'window'];
+
+      const sources = await desktopCapturer.getSources({
+        types: requestedTypes,
+        thumbnailSize: { width: 0, height: 0 },
+        fetchWindowIcons: false,
+      });
 
       const matched =
         (selection ? sources.find((s) => s.id === selection.sourceId) : undefined) ??

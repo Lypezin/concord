@@ -35,6 +35,8 @@ import {
 } from '../lib/format.js';
 import { openExternalUrl } from '../lib/storage.js';
 import { Avatar } from './Avatar.js';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/Popover.js';
+import { ActionTooltip } from './ui/Tooltip.js';
 
 const QUICK_EMOJIS = ['👍', '😂', '🔥', '❤️', '👀'];
 const PICKER_EMOJIS = [
@@ -202,7 +204,6 @@ export function ChatArea({
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
-  const emojiPopoverRef = useRef<HTMLDivElement | null>(null);
   const pendingUploadsRef = useRef<PendingUpload[]>(pendingUploads);
   const isNearBottomRef = useRef(true);
   const prevChannelIdRef = useRef<string | null>(null);
@@ -228,17 +229,6 @@ export function ChatArea({
     el.style.height = 'auto';
     el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
   }, [draft]);
-
-  useEffect(() => {
-    if (!showEmojiPicker) return;
-    const handleClick = (e: MouseEvent) => {
-      if (emojiPopoverRef.current && !emojiPopoverRef.current.contains(e.target as Node)) {
-        setShowEmojiPicker(false);
-      }
-    };
-    document.addEventListener('mousedown', handleClick);
-    return () => document.removeEventListener('mousedown', handleClick);
-  }, [showEmojiPicker]);
 
   useEffect(() => {
     if (!lightboxImage) return;
@@ -512,18 +502,19 @@ export function ChatArea({
 
         <div className="flex items-center gap-2">
           {onToggleMembers && (
-            <button
-              type="button"
-              onClick={onToggleMembers}
-              title={showMembers ? 'Ocultar membros' : 'Mostrar membros'}
-              className={`hidden rounded-lg p-1.5 transition lg:inline-flex ${
-                showMembers
-                  ? 'bg-white/[0.08] text-white'
-                  : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200'
-              }`}
-            >
-              <Users className="h-4 w-4" />
-            </button>
+            <ActionTooltip label={showMembers ? 'Ocultar lista de membros' : 'Mostrar lista de membros'}>
+              <button
+                type="button"
+                onClick={onToggleMembers}
+                className={`hidden rounded-lg p-1.5 transition lg:inline-flex ${
+                  showMembers
+                    ? 'bg-white/[0.08] text-white'
+                    : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200'
+                }`}
+              >
+                <Users className="h-4 w-4" />
+              </button>
+            </ActionTooltip>
           )}
         </div>
       </div>
@@ -871,24 +862,6 @@ export function ChatArea({
         )}
 
         <div className="relative flex items-end gap-2 rounded-xl border border-white/[0.08] bg-[#1c1c22] px-3 py-2 transition focus-within:border-white/[0.18]">
-          {showEmojiPicker && (
-            <div
-              ref={emojiPopoverRef}
-              className="animate-modal-in concord-panel absolute bottom-13 right-2 z-30 grid w-64 grid-cols-8 gap-1 rounded-xl border border-white/[0.09] bg-[#18181d] p-2"
-            >
-              {PICKER_EMOJIS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => insertEmojiAtCursor(emoji)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-base transition hover:bg-white/10"
-                >
-                  {emoji}
-                </button>
-              ))}
-            </div>
-          )}
-
           <input
             ref={fileInputRef}
             type="file"
@@ -901,14 +874,15 @@ export function ChatArea({
               }
             }}
           />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            title="Anexar arquivo ou imagem"
-            className="mb-0.5 rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
-          >
-            <Paperclip className="h-4 w-4" />
-          </button>
+          <ActionTooltip label="Anexar arquivo ou imagem">
+            <button
+              type="button"
+              onClick={() => fileInputRef.current?.click()}
+              className="mb-0.5 rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
+            >
+              <Paperclip className="h-4 w-4" />
+            </button>
+          </ActionTooltip>
 
           <textarea
             ref={composerRef}
@@ -925,36 +899,52 @@ export function ChatArea({
             className="max-h-36 min-h-[24px] flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
           />
 
-          <button
-            type="button"
-            onClick={() => setShowEmojiPicker((prev) => !prev)}
-            title="Inserir emoji"
-            className={`mb-0.5 rounded-lg p-1.5 transition ${
-              showEmojiPicker
-                ? 'bg-white/[0.1] text-white'
-                : 'text-zinc-400 hover:bg-white/[0.07] hover:text-white'
-            }`}
-          >
-            <Smile className="h-4 w-4" />
-          </button>
+          <Popover open={showEmojiPicker} onOpenChange={setShowEmojiPicker}>
+            <PopoverTrigger asChild>
+              <button
+                type="button"
+                title="Inserir emoji"
+                className={`mb-0.5 rounded-lg p-1.5 transition ${
+                  showEmojiPicker
+                    ? 'bg-white/[0.1] text-white'
+                    : 'text-zinc-400 hover:bg-white/[0.07] hover:text-white'
+                }`}
+              >
+                <Smile className="h-4 w-4" />
+              </button>
+            </PopoverTrigger>
+            <PopoverContent side="top" align="end" className="grid w-64 grid-cols-8 gap-1 p-2">
+              {PICKER_EMOJIS.map((emoji) => (
+                <button
+                  key={emoji}
+                  type="button"
+                  onClick={() => insertEmojiAtCursor(emoji)}
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-base transition hover:bg-white/10"
+                >
+                  {emoji}
+                </button>
+              ))}
+            </PopoverContent>
+          </Popover>
 
-          <button
-            type="button"
-            onClick={() => void submitMessage()}
-            disabled={
-              sending ||
-              (draft.trim().length === 0 &&
-                !pendingUploads.some((p) => p.status === 'ready'))
-            }
-            title="Enviar (Enter)"
-            className="mb-0.5 rounded-lg bg-[#5865f2] p-1.5 text-white transition hover:bg-[#4752c4] disabled:opacity-35"
-          >
-            {sending ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <SendHorizontal className="h-4 w-4" />
-            )}
-          </button>
+          <ActionTooltip label="Enviar (Enter)">
+            <button
+              type="button"
+              onClick={() => void submitMessage()}
+              disabled={
+                sending ||
+                (draft.trim().length === 0 &&
+                  !pendingUploads.some((p) => p.status === 'ready'))
+              }
+              className="mb-0.5 rounded-lg bg-[#5865f2] p-1.5 text-white transition hover:bg-[#4752c4] disabled:opacity-35"
+            >
+              {sending ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <SendHorizontal className="h-4 w-4" />
+              )}
+            </button>
+          </ActionTooltip>
         </div>
       </div>
 

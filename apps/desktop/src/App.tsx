@@ -16,11 +16,13 @@ import { ChatArea } from './components/ChatArea.js';
 import { ConfirmModal } from './components/ConfirmModal.js';
 import { InviteModal } from './components/InviteModal.js';
 import { MemberList } from './components/MemberList.js';
+import { PipStreamPlayer } from './components/PipStreamPlayer.js';
 import { ScreenPickerModal } from './components/ScreenPickerModal.js';
 import { Sidebar } from './components/Sidebar.js';
 import { TitleBar } from './components/TitleBar.js';
 import { VoiceSettingsModal } from './components/VoiceSettingsModal.js';
 import { VoiceStage } from './components/VoiceStage.js';
+import { TooltipProvider } from './components/ui/Tooltip.js';
 import { useVoiceRoom } from './hooks/useVoiceRoom.js';
 import { ApiError, createApiClient } from './lib/api.js';
 import { createConcordSocket, type ConcordSocket, type SocketConnectionState } from './lib/socket.js';
@@ -513,7 +515,19 @@ export function App() {
       .filter((u): u is UserPublic => Boolean(u));
   }, [activeChannel, session, typingByChannel, users]);
 
+  const activePipShare = useMemo(() => {
+    if (viewingVoiceStage || !connectedVoiceChannel || voice.screenShares.length === 0) {
+      return null;
+    }
+    return (
+      voice.screenShares.find((s) => s.id === focusedShareId && !s.isLocal) ??
+      voice.screenShares.find((s) => !s.isLocal) ??
+      null
+    );
+  }, [viewingVoiceStage, connectedVoiceChannel, voice.screenShares, focusedShareId]);
+
   return (
+    <TooltipProvider>
     <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0c0c0e] text-zinc-100">
       <TitleBar
         connectionState={session ? connectionState : null}
@@ -654,6 +668,7 @@ export function App() {
               screenSharing={voice.screenSharing}
               muted={voice.muted}
               deafened={voice.deafened}
+              settings={voice.settings}
               userVolumes={voice.settings.userVolumes}
               streamVolumes={voice.settings.streamVolumes}
               focusedShareId={focusedShareId}
@@ -661,6 +676,7 @@ export function App() {
               onSelectFocusShare={setFocusedShareId}
               onSetUserVolume={voice.setUserVolume}
               onSetStreamVolume={voice.setStreamVolume}
+              onUpdateSettings={voice.updateSettings}
               onToggleMute={() => void voice.toggleMute()}
               onToggleDeafen={() => void voice.toggleDeafen()}
               onStartScreenShare={() => setShowScreenPicker(true)}
@@ -723,6 +739,25 @@ export function App() {
               channels={channels}
               voiceParticipants={voiceParticipants}
               voiceStates={voiceStates}
+            />
+          )}
+
+          {activePipShare && (
+            <PipStreamPlayer
+              share={activePipShare}
+              streamerName={
+                users.find((u) => u.id === activePipShare.participantId)?.displayName ??
+                activePipShare.participantName
+              }
+              streamVolume={voice.settings.streamVolumes[activePipShare.participantId] ?? 100}
+              onToggleMuteStream={() => {
+                const cur = voice.settings.streamVolumes[activePipShare.participantId] ?? 100;
+                voice.setStreamVolume(activePipShare.participantId, cur > 0 ? 0 : 100);
+              }}
+              onExpandToStage={() => {
+                setFocusedShareId(activePipShare.id);
+                setViewingVoiceStage(true);
+              }}
             />
           )}
         </div>
@@ -810,5 +845,6 @@ export function App() {
         />
       )}
     </div>
+    </TooltipProvider>
   );
 }
