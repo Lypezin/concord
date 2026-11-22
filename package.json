@@ -1,0 +1,26 @@
+{
+  "name": "concord-monorepo",
+  "private": true,
+  "workspaces": [
+    "packages/shared",
+    "apps/server",
+    "apps/desktop"
+  ],
+  "scripts": {
+    "build:shared": "npm run build -w @concord/shared",
+    "dev:server": "npm run build:shared && npm run dev -w @concord/server",
+    "dev:desktop": "npm run build:shared && npm run dev -w @concord/desktop",
+    "dev": "npm run build:shared && concurrently -n server,desktop -c cyan,magenta \"npm run dev -w @concord/server\" \"npm run dev -w @concord/desktop\"",
+    "build": "npm run build -w @concord/shared && npm run build -w @concord/server && npm run build -w @concord/desktop",
+    "typecheck": "npm run build -w @concord/shared && npm run typecheck -w @concord/server && npm run typecheck -w @concord/desktop",
+    "test:server": "npm run build -w @concord/shared && npm run test -w @concord/server",
+    "setup:livekit": "node scripts/ensure-livekit.mjs",
+    "host": "node scripts/host-server.mjs",
+    "dist:win": "npm run build:shared && npm run dist:win -w @concord/desktop"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.0",
+    "concurrently": "^10.0.0",
+    "typescript": "^5.8.3"
+  }
+}

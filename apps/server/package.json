@@ -1,0 +1,26 @@
+{
+  "name": "@concord/server",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "typecheck": "tsc --noEmit",
+    "start": "node --no-warnings=ExperimentalWarning dist/index.js",
+    "test": "node --no-warnings=ExperimentalWarning --import tsx src/verify.ts"
+  },
+  "dependencies": {
+    "@concord/shared": "*",
+    "@fastify/cors": "^11.4.0",
+    "@fastify/multipart": "^10.1.0",
+    "@fastify/rate-limit": "^11.3.0",
+    "fastify": "^5.12.0",
+    "livekit-server-sdk": "^2.20.1",
+    "socket.io": "^4.8.4"
+  },
+  "devDependencies": {
+    "socket.io-client": "^4.8.4",
+    "tsx": "^4.23.0"
+  }
+}
