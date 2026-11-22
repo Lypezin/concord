@@ -4,12 +4,15 @@ import {
   AlertCircle,
   Check,
   CheckCircle2,
+  Download,
+  Headphones,
   Keyboard,
   Loader2,
   Mic,
   RefreshCw,
   Shield,
   SlidersHorizontal,
+  Sparkles,
   User,
   Volume2,
   X,
@@ -101,12 +104,14 @@ export function VoiceSettingsModal({
   const [outputs, setOutputs] = useState<MediaDeviceInfo[]>([]);
 
   const [testingMic, setTestingMic] = useState(false);
+  const [hearSelf, setHearSelf] = useState(false);
   const [micLevel, setMicLevel] = useState(0);
   const [micError, setMicError] = useState<string | null>(null);
   const micTestCleanupRef = useRef<(() => void) | null>(null);
+  const loopbackGainRef = useRef<GainNode | null>(null);
 
   const [tailscaleStatus, setTailscaleStatus] = useState<TailscaleStatus | null>(null);
-  const [appVersion, setAppVersion] = useState<string>('0.2.0');
+  const [appVersion, setAppVersion] = useState<string>('0.3.0');
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
 
@@ -134,6 +139,12 @@ export function VoiceSettingsModal({
   }, []);
 
   useEffect(() => {
+    if (loopbackGainRef.current) {
+      loopbackGainRef.current.gain.value = hearSelf ? 1 : 0;
+    }
+  }, [hearSelf]);
+
+  useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key !== 'Escape') return;
       const target = e.target as HTMLElement | null;
@@ -158,27 +169,58 @@ export function VoiceSettingsModal({
     if (testingMic) {
       micTestCleanupRef.current?.();
       micTestCleanupRef.current = null;
+      loopbackGainRef.current = null;
       setTestingMic(false);
       setMicLevel(0);
       return;
     }
 
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          deviceId: settings.inputDeviceId !== 'default' ? settings.inputDeviceId : undefined,
-          echoCancellation: settings.echoCancellation,
-          autoGainControl: settings.autoGainControl,
-          noiseSuppression: !settings.rnnoiseEnabled,
-        },
-      });
+      const preferredId =
+        settings.inputDeviceId !== 'default' ? settings.inputDeviceId : undefined;
+
+      let stream: MediaStream;
+      try {
+        stream = await navigator.mediaDevices.getUserMedia({
+          audio: {
+            deviceId: preferredId ? { exact: preferredId } : undefined,
+            echoCancellation: settings.echoCancellation,
+            autoGainControl: settings.autoGainControl,
+            noiseSuppression: true,
+          },
+        });
+      } catch (firstErr) {
+        if (preferredId) {
+          stream = await navigator.mediaDevices.getUserMedia({
+            audio: {
+              echoCancellation: settings.echoCancellation,
+              autoGainControl: settings.autoGainControl,
+              noiseSuppression: true,
+            },
+          });
+          void onUpdateSettings({ ...settings, inputDeviceId: 'default' });
+        } else {
+          throw firstErr;
+        }
+      }
+
       void refreshDevices();
 
-      const ctx = new AudioContext();
+      const ctx = new AudioContext({ latencyHint: 'interactive' });
+      if (ctx.state === 'suspended') {
+        await ctx.resume().catch(() => undefined);
+      }
+
       const source = ctx.createMediaStreamSource(stream);
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       source.connect(analyser);
+
+      const loopbackGain = ctx.createGain();
+      loopbackGain.gain.value = hearSelf ? 1 : 0;
+      source.connect(loopbackGain);
+      loopbackGain.connect(ctx.destination);
+      loopbackGainRef.current = loopbackGain;
 
       const data = new Uint8Array(analyser.frequencyBinCount);
       let rafId = 0;
@@ -191,14 +233,20 @@ export function VoiceSettingsModal({
           sum += norm * norm;
         }
         const rms = Math.sqrt(sum / data.length);
-        setMicLevel(Math.min(100, Math.round(rms * 320)));
+        setMicLevel(Math.min(100, Math.round(rms * 340)));
         rafId = requestAnimationFrame(tick);
       };
       rafId = requestAnimationFrame(tick);
 
       micTestCleanupRef.current = () => {
         cancelAnimationFrame(rafId);
-        source.disconnect();
+        try {
+          source.disconnect();
+          loopbackGain.disconnect();
+        } catch {
+          // ignore
+        }
+        loopbackGainRef.current = null;
         void ctx.close().catch(() => undefined);
         for (const t of stream.getTracks()) t.stop();
       };
@@ -268,7 +316,7 @@ export function VoiceSettingsModal({
                 Perfil, Voz e Atalhos
               </h2>
               <p className="text-[11px] text-slate-400">
-                Personalize seu perfil e ajuste dispositivos de áudio
+                Personalize seu perfil e ajuste microfone, RNNoise IA e dispositivos
               </p>
             </div>
           </div>
@@ -396,8 +444,8 @@ export function VoiceSettingsModal({
             </div>
 
             {/* Medidor de Microfone */}
-            <div className="space-y-2 pt-1">
-              <div className="flex items-center gap-3">
+            <div className="space-y-2.5 pt-1">
+              <div className="flex items-center gap-2.5">
                 <button
                   type="button"
                   onClick={() => void toggleMicTest()}
@@ -409,6 +457,21 @@ export function VoiceSettingsModal({
                 >
                   {testingMic ? 'Parar Teste' : 'Testar Microfone'}
                 </button>
+
+                <button
+                  type="button"
+                  onClick={() => setHearSelf((prev) => !prev)}
+                  title="Ouvir o retorno da sua própria voz durante o teste"
+                  className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                    hearSelf
+                      ? 'border-indigo-400/40 bg-indigo-500/20 text-indigo-200'
+                      : 'border-white/[0.07] bg-[#131724] text-slate-400 hover:text-slate-200'
+                  }`}
+                >
+                  <Headphones className="h-3.5 w-3.5" />
+                  Ouvir retorno
+                </button>
+
                 <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#131724] ring-1 ring-inset ring-white/[0.06]">
                   <div
                     className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-indigo-400 to-violet-400 transition-all duration-75"
@@ -428,8 +491,16 @@ export function VoiceSettingsModal({
 
           {/* Processamento de Voz */}
           <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Qualidade de Voz
+            <div className="flex items-center justify-between">
+              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+                Qualidade de Voz (Opus 64 kbps)
+              </div>
+              {settings.rnnoiseEnabled && (
+                <span className="inline-flex items-center gap-1 rounded-md border border-indigo-400/25 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
+                  <Sparkles className="h-3 w-3 text-indigo-300" />
+                  RNNoise 48kHz Ativo
+                </span>
+              )}
             </div>
 
             <div className="flex items-center justify-between gap-3 py-0.5">
@@ -438,7 +509,7 @@ export function VoiceSettingsModal({
                   RNNoise — Supressão de ruído por IA
                 </div>
                 <div className="text-[11px] text-slate-400">
-                  Remove som de teclado mecânico, ventilador e fundo
+                  Remove som de teclado mecânico, ventilador e ruído de fundo
                 </div>
               </div>
               <ToggleSwitch
@@ -603,24 +674,36 @@ export function VoiceSettingsModal({
 
             <div className="flex items-center justify-between border-t border-white/[0.06] pt-3">
               <div>
-                <div className="font-medium text-slate-200">Concord v{appVersion}</div>
+                <div className="font-semibold text-slate-200">Concord v{appVersion}</div>
                 {updaterStatus?.message && (
                   <div className="text-[11px] text-slate-400">{updaterStatus.message}</div>
                 )}
               </div>
-              <button
-                type="button"
-                onClick={() => void handleCheckUpdates()}
-                disabled={checkingUpdates}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-50"
-              >
-                {checkingUpdates ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-3.5 w-3.5" />
-                )}
-                Buscar Atualização
-              </button>
+
+              {updaterStatus?.state === 'downloaded' ? (
+                <button
+                  type="button"
+                  onClick={() => void window.concordAPI?.installUpdate()}
+                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-md shadow-emerald-500/25 transition hover:from-emerald-500 hover:to-teal-500"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                  Reiniciar e Instalar v{updaterStatus.version}
+                </button>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => void handleCheckUpdates()}
+                  disabled={checkingUpdates}
+                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-50"
+                >
+                  {checkingUpdates ? (
+                    <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-3.5 w-3.5" />
+                  )}
+                  Buscar Atualização
+                </button>
+              )}
             </div>
           </div>
         </div>

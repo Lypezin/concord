@@ -69,6 +69,7 @@ export function App() {
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showScreenPicker, setShowScreenPicker] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showMembers, setShowMembers] = useState(true);
   const [viewingVoiceStage, setViewingVoiceStage] = useState(false);
   const [focusedShareId, setFocusedShareId] = useState<string | null>(null);
   const [deleteChannelTarget, setDeleteChannelTarget] = useState<Channel | null>(null);
@@ -513,7 +514,7 @@ export function App() {
   }, [activeChannel, session, typingByChannel, users]);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#080a0f] text-slate-100">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#06070b] text-slate-100">
       <TitleBar
         connectionState={session ? connectionState : null}
         serverName={serverStatus?.serverName || 'Concord'}
@@ -524,7 +525,7 @@ export function App() {
       />
 
       {bootstrapping ? (
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#080a0f]">
+        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#06070b]">
           <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-indigo-500/15 blur-3xl" />
           <div className="flex flex-col items-center gap-3">
             <Loader2 className="h-7 w-7 animate-spin text-indigo-400" />
@@ -534,7 +535,7 @@ export function App() {
           </div>
         </div>
       ) : !session && pendingOfflineSession ? (
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#080a0f] p-6">
+        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#06070b] p-6">
           <div className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-indigo-600/15 blur-[120px]" />
           <div className="pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-amber-500/10 blur-[120px]" />
           <div className="concord-glass relative w-full max-w-md space-y-5 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121622]/90 p-7 text-center backdrop-blur-xl">
@@ -588,7 +589,10 @@ export function App() {
       ) : !session || !api ? (
         <AuthScreen onAuthenticated={(url, auth, st) => void handleAuthenticated(url, auth, st)} />
       ) : (
-        <div className="flex min-h-0 flex-1">
+        <div className="relative flex min-h-0 flex-1 gap-2 bg-[#06070b] p-2 pt-0">
+          <div className="pointer-events-none absolute -left-24 top-0 h-80 w-80 rounded-full bg-indigo-600/12 blur-[120px]" />
+          <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-violet-600/10 blur-[120px]" />
+
           <Sidebar
             serverName={serverStatus?.serverName || 'Concord'}
             userCount={users.length || serverStatus?.userCount || 1}
@@ -609,6 +613,7 @@ export function App() {
             muted={voice.muted}
             deafened={voice.deafened}
             screenSharing={voice.screenSharing}
+            rnnoiseEnabled={voice.settings.rnnoiseEnabled}
             viewingVoiceStage={viewingVoiceStage}
             userVolumes={voice.settings.userVolumes}
             onSelectChannel={handleSelectChannel}
@@ -655,6 +660,9 @@ export function App() {
               speakingUserIds={voice.speakingUserIds}
               screenShares={voice.screenShares}
               screenSharing={voice.screenSharing}
+              muted={voice.muted}
+              deafened={voice.deafened}
+              rnnoiseEnabled={voice.settings.rnnoiseEnabled}
               userVolumes={voice.settings.userVolumes}
               streamVolumes={voice.settings.streamVolumes}
               focusedShareId={focusedShareId}
@@ -662,8 +670,11 @@ export function App() {
               onSelectFocusShare={setFocusedShareId}
               onSetUserVolume={voice.setUserVolume}
               onSetStreamVolume={voice.setStreamVolume}
+              onToggleMute={() => void voice.toggleMute()}
+              onToggleDeafen={() => void voice.toggleDeafen()}
               onStartScreenShare={() => setShowScreenPicker(true)}
               onStopScreenShare={() => void voice.stopScreenShare()}
+              onDisconnectVoice={() => void voice.leaveVoice(true)}
               onOpenSettings={() => setShowVoiceSettings(true)}
               onBackToChat={() => setViewingVoiceStage(false)}
             />
@@ -677,6 +688,8 @@ export function App() {
               loadingMessages={loadingMessages && !messagesByChannel[activeChannel.id]}
               loadingOlder={loadingOlder}
               typingUsers={activeTypingUsers}
+              showMembers={showMembers}
+              onToggleMembers={() => setShowMembers((prev) => !prev)}
               onLoadOlder={handleLoadOlder}
               onSendMessage={async (content, attachmentIds) => {
                 await api.sendMessage(activeChannel.id, { content, attachmentIds });
@@ -706,19 +719,21 @@ export function App() {
               }}
             />
           ) : (
-            <div className="flex flex-1 flex-col items-center justify-center bg-[#11141d] text-slate-400">
+            <div className="concord-island flex flex-1 flex-col items-center justify-center rounded-2xl border border-white/[0.08] bg-[#0e121c]/95 text-slate-400">
               <Volume2 className="mb-2 h-8 w-8 text-slate-500" />
               <p className="text-sm">Selecione um canal de texto para conversar.</p>
             </div>
           )}
 
-          <MemberList
-            users={users}
-            onlineUserIds={onlineUserIds}
-            channels={channels}
-            voiceParticipants={voiceParticipants}
-            voiceStates={voiceStates}
-          />
+          {showMembers && (
+            <MemberList
+              users={users}
+              onlineUserIds={onlineUserIds}
+              channels={channels}
+              voiceParticipants={voiceParticipants}
+              voiceStates={voiceStates}
+            />
+          )}
         </div>
       )}
 

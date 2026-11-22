@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import type { Channel } from '@concord/shared';
-import { MonitorOff, MonitorUp, PhoneOff, Radio, Tv } from 'lucide-react';
+import { MonitorOff, MonitorUp, PhoneOff, Radio, Sparkles, Tv } from 'lucide-react';
 import type { VoiceConnectionState } from '../hooks/useVoiceRoom.js';
 
 interface VoiceDockProps {
@@ -9,6 +9,7 @@ interface VoiceDockProps {
   connectedAt: number | null;
   screenSharing: boolean;
   viewingStage: boolean;
+  rnnoiseEnabled?: boolean;
   totalUnreadCount: number;
   onToggleStage: () => void;
   onStartScreenShare: () => void;
@@ -34,6 +35,7 @@ export function VoiceDock({
   connectedAt,
   screenSharing,
   viewingStage,
+  rnnoiseEnabled = true,
   totalUnreadCount,
   onToggleStage,
   onStartScreenShare,
@@ -59,15 +61,15 @@ export function VoiceDock({
   const isConnected = voiceState === 'connected';
 
   return (
-    <div className="mx-2 mb-2 rounded-xl border border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.11] to-[#111520] p-2.5 shadow-lg">
-      <div className="mb-2.5 flex items-center justify-between gap-2">
+    <div className="mx-2.5 mb-2 rounded-2xl border border-emerald-500/25 bg-gradient-to-b from-emerald-500/[0.13] via-[#101722] to-[#0c1018] p-3 shadow-xl">
+      <div className="mb-2.5 flex items-start justify-between gap-2">
         <button
           type="button"
           onClick={onToggleStage}
           className="group min-w-0 flex-1 text-left"
           title="Abrir palco de voz e telas"
         >
-          <div className="flex items-center justify-between gap-1.5 text-[11px] font-semibold">
+          <div className="flex items-center justify-between gap-1.5 text-[11px] font-bold">
             <span
               className={`flex min-w-0 items-center gap-1.5 ${
                 isConnected ? 'text-emerald-300' : 'text-amber-300'
@@ -90,13 +92,22 @@ export function VoiceDock({
             </span>
 
             {connectedAt && isConnected && (
-              <span className="shrink-0 rounded-md bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[10px] font-medium tabular-nums text-emerald-200">
+              <span className="shrink-0 rounded-md border border-emerald-400/25 bg-emerald-500/15 px-1.5 py-0.5 font-mono text-[10px] font-semibold tabular-nums text-emerald-200">
                 {formatDuration(connectedAt, now)}
               </span>
             )}
           </div>
-          <div className="mt-0.5 truncate pl-0.5 text-xs font-medium text-slate-300 transition group-hover:text-white">
-            {channel.name}
+
+          <div className="mt-1 flex items-center gap-1.5">
+            <span className="truncate text-xs font-semibold text-white transition group-hover:text-emerald-200">
+              {channel.name}
+            </span>
+            {rnnoiseEnabled && (
+              <span className="inline-flex shrink-0 items-center gap-0.5 rounded-md border border-indigo-400/25 bg-indigo-500/15 px-1.5 py-0.2 text-[9px] font-semibold text-indigo-200">
+                <Sparkles className="h-2.5 w-2.5 text-indigo-300" />
+                IA
+              </span>
+            )}
           </div>
         </button>
 
@@ -104,7 +115,7 @@ export function VoiceDock({
           type="button"
           onClick={onDisconnect}
           title="Desconectar da call"
-          className="shrink-0 rounded-lg border border-rose-500/20 bg-rose-500/10 p-1.5 text-rose-300 transition hover:bg-rose-500/25 hover:text-rose-200"
+          className="shrink-0 rounded-xl border border-rose-500/25 bg-rose-500/15 p-2 text-rose-300 transition hover:bg-rose-500/30 hover:text-white"
         >
           <PhoneOff className="h-4 w-4" />
         </button>
@@ -115,10 +126,10 @@ export function VoiceDock({
           type="button"
           onClick={screenSharing ? onStopScreenShare : onStartScreenShare}
           disabled={!isConnected}
-          className={`flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition disabled:opacity-40 ${
+          className={`flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-semibold transition disabled:opacity-40 ${
             screenSharing
-              ? 'border-rose-500/30 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30'
-              : 'border-white/[0.08] bg-white/[0.06] text-slate-200 hover:bg-white/[0.12]'
+              ? 'border-rose-500/35 bg-rose-500/25 text-rose-100 hover:bg-rose-500/35'
+              : 'border-white/[0.08] bg-white/[0.06] text-slate-200 hover:bg-white/[0.12] hover:text-white'
           }`}
         >
           {screenSharing ? (
@@ -129,7 +140,7 @@ export function VoiceDock({
           ) : (
             <>
               <MonitorUp className="h-3.5 w-3.5" />
-              Tela
+              Tela 60fps
             </>
           )}
         </button>
@@ -137,10 +148,10 @@ export function VoiceDock({
         <button
           type="button"
           onClick={onToggleStage}
-          className={`relative flex items-center justify-center gap-1.5 rounded-lg border px-2 py-1.5 text-[11px] font-semibold transition ${
+          className={`relative flex items-center justify-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-semibold transition ${
             viewingStage
-              ? 'border-indigo-400/35 bg-indigo-500/25 text-indigo-100 hover:bg-indigo-500/35'
-              : 'border-white/[0.08] bg-white/[0.06] text-slate-200 hover:bg-white/[0.12]'
+              ? 'border-indigo-400/40 bg-gradient-to-r from-indigo-600/35 to-violet-600/30 text-indigo-100 hover:from-indigo-600/45 hover:to-violet-600/40'
+              : 'border-white/[0.08] bg-white/[0.06] text-slate-200 hover:bg-white/[0.12] hover:text-white'
           }`}
         >
           <Tv className="h-3.5 w-3.5" />

@@ -7,8 +7,8 @@ import {
   RemoteParticipant,
   Room,
   RoomEvent,
-  ScreenSharePresets,
   Track,
+  VideoQuality,
   type LocalTrackPublication,
   type RemoteTrack,
   type RemoteTrackPublication,
@@ -51,12 +51,35 @@ export interface ScreenShareStream {
 
 const RESOLUTION_PRESETS: Record<
   ScreenShareOptions['resolution'],
-  { width: number; height: number; maxBitrate: number }
+  { width: number; height: number; bitrate30: number; bitrate60: number }
 > = {
-  '720p': { width: 1280, height: 720, maxBitrate: 3_000_000 },
-  '1080p': { width: 1920, height: 1080, maxBitrate: 6_000_000 },
-  '1440p': { width: 2560, height: 1440, maxBitrate: 10_000_000 },
+  '720p': { width: 1280, height: 720, bitrate30: 4_000_000, bitrate60: 6_000_000 },
+  '1080p': { width: 1920, height: 1080, bitrate30: 6_000_000, bitrate60: 10_000_000 },
+  '1440p': { width: 2560, height: 1440, bitrate30: 10_000_000, bitrate60: 16_000_000 },
 };
+
+const micAudioContexts = new WeakMap<LocalAudioTrack, AudioContext>();
+
+async function releaseMicTrack(track: LocalAudioTrack): Promise<void> {
+  await track.stopProcessor().catch(() => undefined);
+  track.stop();
+  const ctx = micAudioContexts.get(track);
+  micAudioContexts.delete(track);
+  if (ctx && ctx.state !== 'closed') {
+    await ctx.close().catch(() => undefined);
+  }
+}
+
+function boostRemoteScreenShareQuality(publication: RemoteTrackPublication): void {
+  if (publication.source !== Track.Source.ScreenShare) return;
+  try {
+    publication.setEnabled(true);
+    publication.setVideoQuality(VideoQuality.HIGH);
+    publication.setVideoFPS(60);
+  } catch {
+    // ignore if publication does not support quality override
+  }
+}
 
 export function useVoiceRoom(options: {
   api: ConcordApiClient | null;
@@ -79,11 +102,13 @@ export function useVoiceRoom(options: {
   const [muted, setMuted] = useState(false);
   const [deafened, setDeafened] = useState(false);
   const [screenSharing, setScreenSharing] = useState(false);
-  const [speakingUserIds, setSpeakingUserIds] = useState<string[]>([]);
+  const [remoteSpeakingIds, setRemoteSpeakingIds] = useState<string[]>([]);
+  const [localSpeaking, setLocalSpeaking] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShareStream[]>([]);
 
   const roomRef = useRef<Room | null>(null);
   const micTrackRef = useRef<LocalAudioTrack | null>(null);
+  const speechMonitorCleanupRef = useRef<(() => void) | null>(null);
   const screenVideoTrackRef = useRef<LocalVideoTrack | null>(null);
   const screenAudioTrackRef = useRef<LocalAudioTrack | null>(null);
   const audioEngineRef = useRef<RemoteAudioEngine | null>(null);
@@ -118,15 +143,81 @@ export function useVoiceRoom(options: {
 
   useEffect(() => {
     mutedRef.current = muted;
+    if (muted) setLocalSpeaking(false);
   }, [muted]);
 
   useEffect(() => {
     deafenedRef.current = deafened;
+    if (deafened) setLocalSpeaking(false);
   }, [deafened]);
 
   useEffect(() => {
     screenSharingRef.current = screenSharing;
   }, [screenSharing]);
+
+  const stopLocalSpeechMonitor = useCallback(() => {
+    speechMonitorCleanupRef.current?.();
+    speechMonitorCleanupRef.current = null;
+    setLocalSpeaking(false);
+  }, []);
+
+  const startLocalSpeechMonitor = useCallback(
+    (track: LocalAudioTrack) => {
+      stopLocalSpeechMonitor();
+      try {
+        const mediaTrack = track.mediaStreamTrack;
+        if (!mediaTrack || mediaTrack.readyState === 'ended') return;
+
+        const ctx = new AudioContext({ latencyHint: 'interactive' });
+        if (ctx.state === 'suspended') {
+          void ctx.resume().catch(() => undefined);
+        }
+        const source = ctx.createMediaStreamSource(new MediaStream([mediaTrack]));
+        const analyser = ctx.createAnalyser();
+        analyser.fftSize = 256;
+        source.connect(analyser);
+
+        const buf = new Uint8Array(analyser.frequencyBinCount);
+        let holdFrames = 0;
+
+        const timer = setInterval(() => {
+          if (mutedRef.current || deafenedRef.current || track.isMuted) {
+            holdFrames = 0;
+            setLocalSpeaking((prev) => (prev ? false : prev));
+            return;
+          }
+          analyser.getByteTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) {
+            const norm = (buf[i]! - 128) / 128;
+            sum += norm * norm;
+          }
+          const rms = Math.sqrt(sum / buf.length);
+          if (rms > 0.016) {
+            holdFrames = 4;
+            setLocalSpeaking((prev) => (prev ? prev : true));
+          } else if (holdFrames > 0) {
+            holdFrames--;
+          } else {
+            setLocalSpeaking((prev) => (prev ? false : prev));
+          }
+        }, 75);
+
+        speechMonitorCleanupRef.current = () => {
+          clearInterval(timer);
+          try {
+            source.disconnect();
+          } catch {
+            // ignore
+          }
+          void ctx.close().catch(() => undefined);
+        };
+      } catch {
+        // non-fatal if local speech detector cannot start
+      }
+    },
+    [stopLocalSpeechMonitor],
+  );
 
   const emitVoiceState = useCallback(
     (next: {
@@ -242,6 +333,8 @@ export function useVoiceRoom(options: {
     async (playSound = true) => {
       const wasConnected = Boolean(connectedChannelRef.current || roomRef.current);
 
+      stopLocalSpeechMonitor();
+
       const vTrack = screenVideoTrackRef.current;
       const aTrack = screenAudioTrackRef.current;
       screenVideoTrackRef.current = null;
@@ -252,8 +345,7 @@ export function useVoiceRoom(options: {
       const mic = micTrackRef.current;
       micTrackRef.current = null;
       if (mic) {
-        await mic.stopProcessor().catch(() => undefined);
-        mic.stop();
+        await releaseMicTrack(mic);
       }
 
       const room = roomRef.current;
@@ -271,7 +363,8 @@ export function useVoiceRoom(options: {
       setVoiceState('disconnected');
       setScreenSharing(false);
       screenSharingRef.current = false;
-      setSpeakingUserIds([]);
+      setRemoteSpeakingIds([]);
+      setLocalSpeaking(false);
       setScreenShares([]);
 
       emitVoiceState({
@@ -285,7 +378,7 @@ export function useVoiceRoom(options: {
         playLeaveVoice();
       }
     },
-    [emitVoiceState],
+    [emitVoiceState, stopLocalSpeechMonitor],
   );
 
   const leaveVoice = useCallback(
@@ -311,17 +404,72 @@ export function useVoiceRoom(options: {
   }, [leaveVoice]);
 
   const createMicTrackWithSettings = useCallback(
-    async (cfg: VoiceAudioSettings): Promise<LocalAudioTrack> => {
-      const track = await createLocalAudioTrack({
-        deviceId: cfg.inputDeviceId !== 'default' ? cfg.inputDeviceId : undefined,
-        echoCancellation: cfg.echoCancellation,
-        autoGainControl: cfg.autoGainControl,
-        noiseSuppression: !cfg.rnnoiseEnabled,
-      });
+    async (cfg: VoiceAudioSettings, room?: Room | null): Promise<LocalAudioTrack> => {
+      const preferredDeviceId =
+        cfg.inputDeviceId && cfg.inputDeviceId !== 'default' ? cfg.inputDeviceId : undefined;
+
+      const buildTrack = async (browserNoiseSuppression: boolean): Promise<LocalAudioTrack> => {
+        try {
+          return await createLocalAudioTrack({
+            deviceId: preferredDeviceId,
+            echoCancellation: cfg.echoCancellation,
+            autoGainControl: cfg.autoGainControl,
+            noiseSuppression: browserNoiseSuppression,
+            channelCount: 1,
+            sampleRate: 48000,
+          });
+        } catch (err) {
+          // Se o microfone salvo foi desconectado do USB, faz fallback imediato para o padrão do Windows
+          if (preferredDeviceId) {
+            console.warn(
+              '[Concord] Microfone selecionado indisponível, usando microfone padrão do Windows:',
+              err,
+            );
+            return createLocalAudioTrack({
+              deviceId: undefined,
+              echoCancellation: cfg.echoCancellation,
+              autoGainControl: cfg.autoGainControl,
+              noiseSuppression: browserNoiseSuppression,
+              channelCount: 1,
+              sampleRate: 48000,
+            });
+          }
+          throw err;
+        }
+      };
+
+      let track = await buildTrack(!cfg.rnnoiseEnabled);
 
       if (cfg.rnnoiseEnabled) {
-        const processor = new RNNoiseAudioProcessor();
-        await track.setProcessor(processor);
+        try {
+          const roomInternal = room as unknown as {
+            audioContext?: AudioContext;
+            localParticipant?: { audioContext?: AudioContext };
+          } | null;
+
+          let ctx =
+            roomInternal?.localParticipant?.audioContext ??
+            roomInternal?.audioContext;
+
+          if (!ctx || ctx.state === 'closed') {
+            ctx = new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
+            micAudioContexts.set(track, ctx);
+            if (roomInternal?.localParticipant) {
+              roomInternal.localParticipant.audioContext = ctx;
+            }
+          }
+
+          if (ctx.state === 'suspended') {
+            await ctx.resume().catch(() => undefined);
+          }
+
+          await track.setAudioContext(ctx);
+          await track.setProcessor(new RNNoiseAudioProcessor());
+        } catch (err) {
+          console.warn('[Concord] RNNoise falhou, usando supressão de ruído nativa:', err);
+          await releaseMicTrack(track);
+          track = await buildTrack(true);
+        }
       }
 
       if (mutedRef.current || deafenedRef.current) {
@@ -370,8 +518,10 @@ export function useVoiceRoom(options: {
         audioEngineRef.current = engine;
 
         const room = new Room({
-          adaptiveStream: true,
-          dynacast: true,
+          // Grupo pequeno (máx. 4): sempre receber a melhor qualidade e 60 FPS,
+          // sem o LiveKit reduzir resolução/FPS conforme o tamanho do elemento de vídeo.
+          adaptiveStream: false,
+          dynacast: false,
           stopLocalTrackOnUnpublish: true,
         });
         localRoom = room;
@@ -410,7 +560,7 @@ export function useVoiceRoom(options: {
 
         room.on(RoomEvent.ActiveSpeakersChanged, (speakers) => {
           if (roomRef.current === room) {
-            setSpeakingUserIds(speakers.map((s) => s.identity));
+            setRemoteSpeakingIds(speakers.map((s) => s.identity));
           }
         });
 
@@ -423,6 +573,9 @@ export function useVoiceRoom(options: {
           ) => {
             if (roomRef.current !== room) return;
             attachAudioPub(track, publication, participant);
+            if (publication.source === Track.Source.ScreenShare) {
+              boostRemoteScreenShareQuality(publication);
+            }
             if (
               publication.source === Track.Source.ScreenShare ||
               publication.source === Track.Source.ScreenShareAudio
@@ -474,6 +627,7 @@ export function useVoiceRoom(options: {
         });
 
         await room.connect(url, token);
+        await room.startAudio().catch(() => undefined);
 
         if (joinAttemptIdRef.current !== attemptId || roomRef.current !== room) {
           await room.disconnect(true).catch(() => undefined);
@@ -486,6 +640,9 @@ export function useVoiceRoom(options: {
           for (const pub of participant.trackPublications.values()) {
             if (pub.isSubscribed && pub.track) {
               attachAudioPub(pub.track, pub, participant);
+              if (pub.source === Track.Source.ScreenShare) {
+                boostRemoteScreenShareQuality(pub);
+              }
             }
           }
         }
@@ -493,19 +650,19 @@ export function useVoiceRoom(options: {
 
         // Publish microphone (warn gracefully if PC has no microphone)
         try {
-          const micTrack = await createMicTrackWithSettings(settingsRef.current);
+          const micTrack = await createMicTrackWithSettings(settingsRef.current, room);
           if (joinAttemptIdRef.current !== attemptId || roomRef.current !== room) {
-            await micTrack.stopProcessor().catch(() => undefined);
-            micTrack.stop();
+            await releaseMicTrack(micTrack);
             return;
           }
           micTrackRef.current = micTrack;
           await room.localParticipant.publishTrack(micTrack, {
             source: Track.Source.Microphone,
-            audioPreset: AudioPresets.speech,
+            audioPreset: { maxBitrate: 64_000 },
             dtx: true,
             red: true,
           });
+          startLocalSpeechMonitor(micTrack);
         } catch (micErr) {
           if (joinAttemptIdRef.current !== attemptId) {
             return;
@@ -547,7 +704,15 @@ export function useVoiceRoom(options: {
         await leaveVoiceInternal(false);
       }
     },
-    [api, createMicTrackWithSettings, emitVoiceState, leaveVoice, leaveVoiceInternal, rebuildScreenShares],
+    [
+      api,
+      createMicTrackWithSettings,
+      emitVoiceState,
+      leaveVoice,
+      leaveVoiceInternal,
+      rebuildScreenShares,
+      startLocalSpeechMonitor,
+    ],
   );
 
   const toggleMute = useCallback(async () => {
@@ -643,9 +808,9 @@ export function useVoiceRoom(options: {
 
       const streamConstraints = {
         video: {
-          width: { ideal: preset.width },
-          height: { ideal: preset.height },
-          frameRate: { ideal: opts.fps, max: opts.fps },
+          width: { ideal: preset.width, max: preset.width },
+          height: { ideal: preset.height, max: preset.height },
+          frameRate: { min: opts.fps >= 60 ? 30 : 15, ideal: opts.fps, max: opts.fps },
         },
         audio: opts.includeSystemAudio
           ? ({
@@ -666,6 +831,14 @@ export function useVoiceRoom(options: {
           throw new Error('Nenhuma faixa de vídeo retornada pelo sistema.');
         }
 
+        await rawVideo
+          .applyConstraints({
+            width: { ideal: preset.width, max: preset.width },
+            height: { ideal: preset.height, max: preset.height },
+            frameRate: { ideal: opts.fps, max: opts.fps },
+          })
+          .catch(() => undefined);
+
         rawVideo.contentHint = opts.contentHint;
 
         const localVideo = new LocalVideoTrack(rawVideo, undefined, false);
@@ -675,17 +848,44 @@ export function useVoiceRoom(options: {
           void stopScreenShareInternal();
         };
 
+        const targetBitrate = opts.fps >= 60 ? preset.bitrate60 : preset.bitrate30;
+        const degradationPref =
+          opts.contentHint === 'detail' ? 'maintain-resolution' : 'maintain-framerate';
+
         await room.localParticipant.publishTrack(localVideo, {
           source: Track.Source.ScreenShare,
-          simulcast: true,
+          // Camada única em alta qualidade: evita que o receptor caia em simulcast 720p@15fps.
+          simulcast: false,
+          // H.264 usa codificação por hardware (NVENC/QuickSync/AMF) no Windows para 60 FPS estáveis.
+          videoCodec: 'h264',
           screenShareEncoding: {
-            maxBitrate: preset.maxBitrate,
+            maxBitrate: targetBitrate,
             maxFramerate: opts.fps,
+            priority: 'high',
           },
-          screenShareSimulcastLayers: [ScreenSharePresets.h720fps15],
-          degradationPreference:
-            opts.contentHint === 'detail' ? 'maintain-resolution' : 'maintain-framerate',
+          degradationPreference: degradationPref,
         });
+
+        // Trava parâmetros do RTCRtpSender sem downscale e com frameRate máximo
+        try {
+          const sender = localVideo.sender;
+          if (sender) {
+            const params = sender.getParameters();
+            if (params.encodings && params.encodings.length > 0) {
+              for (const enc of params.encodings) {
+                enc.maxBitrate = targetBitrate;
+                enc.maxFramerate = opts.fps;
+                enc.scaleResolutionDownBy = 1;
+                enc.priority = 'high';
+                enc.networkPriority = 'high';
+              }
+              params.degradationPreference = degradationPref;
+              await sender.setParameters(params).catch(() => undefined);
+            }
+          }
+        } catch {
+          // ignore if browser/driver does not allow direct sender param mutation
+        }
 
         const rawAudio = stream.getAudioTracks()[0];
         if (rawAudio) {
@@ -745,28 +945,28 @@ export function useVoiceRoom(options: {
           if (!room || !connectedChannelRef.current) return;
 
           const latestSettings = settingsRef.current;
+          stopLocalSpeechMonitor();
           const oldMic = micTrackRef.current;
           micTrackRef.current = null;
           if (oldMic) {
             await room.localParticipant.unpublishTrack(oldMic, true).catch(() => undefined);
-            await oldMic.stopProcessor().catch(() => undefined);
-            oldMic.stop();
+            await releaseMicTrack(oldMic);
           }
 
           try {
-            const newMic = await createMicTrackWithSettings(latestSettings);
+            const newMic = await createMicTrackWithSettings(latestSettings, room);
             if (roomRef.current !== room || !connectedChannelRef.current) {
-              await newMic.stopProcessor().catch(() => undefined);
-              newMic.stop();
+              await releaseMicTrack(newMic);
               return;
             }
             micTrackRef.current = newMic;
             await room.localParticipant.publishTrack(newMic, {
               source: Track.Source.Microphone,
-              audioPreset: AudioPresets.speech,
+              audioPreset: { maxBitrate: 64_000 },
               dtx: true,
               red: true,
             });
+            startLocalSpeechMonitor(newMic);
           } catch (err) {
             setVoiceError(
               err instanceof Error ? err.message : 'Erro ao atualizar microfone.',
@@ -778,7 +978,7 @@ export function useVoiceRoom(options: {
         await micRebuildChainRef.current;
       }
     },
-    [createMicTrackWithSettings],
+    [createMicTrackWithSettings, startLocalSpeechMonitor, stopLocalSpeechMonitor],
   );
 
   const setUserVolume = useCallback((userId: string, volumePercent: number) => {
@@ -826,6 +1026,11 @@ export function useVoiceRoom(options: {
       }
     });
   }, [toggleMute, toggleDeafen]);
+
+  const speakingUserIds =
+    localSpeaking && currentUserId && !remoteSpeakingIds.includes(currentUserId)
+      ? [...remoteSpeakingIds, currentUserId]
+      : remoteSpeakingIds;
 
   return {
     settings,

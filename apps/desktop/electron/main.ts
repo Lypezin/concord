@@ -202,7 +202,10 @@ function setupPermissionHandlers(): void {
 function setupDisplayMediaHandler(): void {
   session.defaultSession.setDisplayMediaRequestHandler(async (_request, callback) => {
     try {
-      const sources = await desktopCapturer.getSources({ types: ['screen', 'window'] });
+      const sources = await desktopCapturer.getSources({
+        types: ['screen', 'window'],
+        thumbnailSize: { width: 0, height: 0 },
+      });
       const selection =
         pendingScreenSelection && Date.now() - pendingScreenSelection.createdAt < 15000
           ? pendingScreenSelection
@@ -271,11 +274,11 @@ function createWindow(): void {
     height: 800,
     minWidth: 960,
     minHeight: 620,
-    backgroundColor: '#080a0f',
+    backgroundColor: '#06070b',
     icon: icon.isEmpty() ? undefined : icon,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#080a0f',
+      color: '#06070b',
       symbolColor: '#94a3b8',
       height: 38,
     },
@@ -284,9 +287,11 @@ function createWindow(): void {
       contextIsolation: true,
       nodeIntegration: false,
       sandbox: false,
+      backgroundThrottling: false,
     },
   });
 
+  mainWindow.webContents.setBackgroundThrottling(false);
   mainWindow.setMenuBarVisibility(false);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
@@ -324,6 +329,17 @@ const gotLock = app.requestSingleInstanceLock();
 if (!gotLock) {
   app.quit();
 } else {
+  // Evita que o Windows/Chromium reduza os FPS da captura de tela e WebRTC
+  // quando o Concord estiver em segundo plano atrás de um jogo em tela cheia.
+  app.commandLine.appendSwitch('disable-renderer-backgrounding');
+  app.commandLine.appendSwitch('disable-background-timer-throttling');
+  app.commandLine.appendSwitch('disable-backgrounding-occluded-windows');
+  app.commandLine.appendSwitch(
+    'disable-features',
+    'CalculateNativeWinOcclusion,IntensiveWakeUpThrottling',
+  );
+  app.commandLine.appendSwitch('webrtc-max-cpu-consumption-percentage', '100');
+
   app.on('second-instance', () => {
     showMainWindow();
   });

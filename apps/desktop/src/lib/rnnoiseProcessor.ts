@@ -45,9 +45,9 @@ export class RNNoiseAudioProcessor
   async init(opts: AudioProcessorOptions): Promise<void> {
     try {
       const targetContext =
-        opts.audioContext.sampleRate === 48000
+        opts.audioContext?.sampleRate === 48000
           ? opts.audioContext
-          : new AudioContext({ sampleRate: 48000 });
+          : new AudioContext({ sampleRate: 48000, latencyHint: 'interactive' });
 
       if (targetContext !== opts.audioContext) {
         this.ownContext = targetContext;

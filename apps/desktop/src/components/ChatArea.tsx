@@ -12,6 +12,7 @@ import {
 import type { Attachment, Channel, Message, UserPublic } from '@concord/shared';
 import {
   ChevronUp,
+  Crown,
   Download,
   FileText,
   Hash,
@@ -22,6 +23,7 @@ import {
   Smile,
   Trash2,
   UploadCloud,
+  Users,
   X,
 } from 'lucide-react';
 import type { ConcordApiClient } from '../lib/api.js';
@@ -61,6 +63,8 @@ interface ChatAreaProps {
   loadingMessages: boolean;
   loadingOlder: boolean;
   typingUsers: UserPublic[];
+  showMembers?: boolean;
+  onToggleMembers?: () => void;
   onLoadOlder: () => Promise<void>;
   onSendMessage: (content: string, attachmentIds: string[]) => Promise<void>;
   onEditMessage: (messageId: string, content: string) => Promise<void>;
@@ -176,6 +180,8 @@ export function ChatArea({
   loadingMessages,
   loadingOlder,
   typingUsers,
+  showMembers = true,
+  onToggleMembers,
   onLoadOlder,
   onSendMessage,
   onEditMessage,
@@ -479,7 +485,7 @@ export function ChatArea({
 
   return (
     <section
-      className="relative flex min-w-0 flex-1 flex-col bg-[#11141d]"
+      className="concord-island relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0e121c]/95"
       onDragOver={(e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -491,11 +497,11 @@ export function ChatArea({
       }}
       onDrop={handleDrop}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-32 bg-gradient-to-b from-indigo-500/[0.045] to-transparent" />
+      <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-indigo-500/[0.06] to-transparent" />
 
       {/* Overlay de Drag & Drop */}
       {isDragging && (
-        <div className="animate-modal-in pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-indigo-400/70 bg-indigo-950/75 backdrop-blur-md">
+        <div className="animate-modal-in pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-indigo-400/70 bg-indigo-950/80 backdrop-blur-md">
           <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 ring-1 ring-inset ring-indigo-400/30">
             <UploadCloud className="h-7 w-7" />
           </div>
@@ -507,24 +513,47 @@ export function ChatArea({
       )}
 
       {/* Cabeçalho do Canal */}
-      <div className="relative z-10 flex h-12 shrink-0 items-center justify-between border-b border-white/[0.06] bg-[#11141d]/85 px-4 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300 ring-1 ring-inset ring-indigo-500/25">
-            <Hash className="h-3.5 w-3.5" />
+      <div className="relative z-10 flex h-13 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0e121c]/85 px-4 backdrop-blur-md">
+        <div className="flex min-w-0 items-center gap-3">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/25 bg-gradient-to-br from-indigo-500/20 to-violet-500/15 text-indigo-300 shadow-sm">
+            <Hash className="h-4 w-4" />
           </div>
-          <h3 className="truncate text-sm font-semibold tracking-tight text-white">
-            {channel.name}
-          </h3>
+          <div className="min-w-0">
+            <h3 className="truncate text-sm font-bold tracking-tight text-white">
+              {channel.name}
+            </h3>
+            <p className="truncate text-[10.5px] text-slate-400">
+              Chat em tempo real • Cole imagens com Ctrl+V
+            </p>
+          </div>
         </div>
-        <div className="hidden items-center gap-1.5 text-[11px] text-slate-500 sm:flex">
-          <kbd className="rounded border border-white/10 bg-[#0a0d14] px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-            Ctrl
-          </kbd>
-          <span>+</span>
-          <kbd className="rounded border border-white/10 bg-[#0a0d14] px-1.5 py-0.5 font-mono text-[10px] text-slate-300">
-            V
-          </kbd>
-          <span>cola prints direto no chat</span>
+
+        <div className="flex items-center gap-2">
+          <div className="hidden items-center gap-1.5 rounded-xl border border-white/[0.06] bg-[#080a10] px-2.5 py-1 text-[10.5px] text-slate-400 sm:flex">
+            <kbd className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.2 font-mono text-[10px] text-slate-200">
+              Ctrl
+            </kbd>
+            <span>+</span>
+            <kbd className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.2 font-mono text-[10px] text-slate-200">
+              V
+            </kbd>
+            <span>para colar prints</span>
+          </div>
+
+          {onToggleMembers && (
+            <button
+              type="button"
+              onClick={onToggleMembers}
+              title={showMembers ? 'Ocultar lista de membros' : 'Mostrar lista de membros'}
+              className={`hidden rounded-xl border p-2 transition lg:inline-flex ${
+                showMembers
+                  ? 'border-indigo-400/30 bg-indigo-500/15 text-indigo-200'
+                  : 'border-white/[0.08] bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-white'
+              }`}
+            >
+              <Users className="h-4 w-4" />
+            </button>
+          )}
         </div>
       </div>
 
@@ -546,7 +575,7 @@ export function ChatArea({
                   type="button"
                   onClick={() => void handleLoadOlderClick()}
                   disabled={loadingOlder}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-[#0a0d14] px-3.5 py-1.5 text-xs font-medium text-slate-300 shadow-sm transition hover:border-indigo-400/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-[#080a10] px-3.5 py-1.5 text-xs font-medium text-slate-300 shadow-sm transition hover:border-indigo-400/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
                 >
                   {loadingOlder ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -559,19 +588,19 @@ export function ChatArea({
             )}
 
             {messages.length === 0 && (
-              <div className="mx-auto my-8 max-w-md rounded-2xl border border-white/[0.06] bg-[#151926]/60 p-8 text-center">
-                <div className="mx-auto mb-3.5 flex h-12 w-12 items-center justify-center rounded-2xl border border-indigo-400/25 bg-indigo-500/15 text-indigo-300 shadow-[0_0_24px_rgba(99,102,241,0.2)]">
+              <div className="mx-auto my-8 max-w-md rounded-2xl border border-white/[0.07] bg-gradient-to-b from-indigo-500/[0.08] to-[#131826]/70 p-8 text-center shadow-xl">
+                <div className="mx-auto mb-3.5 flex h-13 w-13 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-500/20 text-indigo-200 shadow-[0_0_28px_rgba(99,102,241,0.28)]">
                   <Hash className="h-6 w-6" />
                 </div>
                 <h4 className="text-base font-bold tracking-tight text-white">
                   Bem-vindo a #{channel.name}
                 </h4>
                 <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                  Este é o início do canal. Mande um salve, use{' '}
-                  <code className="rounded bg-white/10 px-1 py-0.5 font-mono text-[11px] text-indigo-200">
+                  Este é o início do canal. Mande uma mensagem, use{' '}
+                  <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-indigo-200">
                     **negrito**
                   </code>{' '}
-                  ou cole uma imagem com Ctrl+V!
+                  ou cole uma captura de tela com Ctrl+V!
                 </p>
               </div>
             )}
@@ -592,23 +621,23 @@ export function ChatArea({
               return (
                 <Fragment key={msg.id}>
                   {isNewDay && (
-                    <div className="my-4 flex items-center gap-3 select-none">
-                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/[0.08] to-white/[0.08]" />
-                      <span className="rounded-full border border-white/[0.07] bg-[#0c0f17] px-2.5 py-0.5 text-[10.5px] font-semibold tracking-wide text-slate-400">
+                    <div className="my-5 flex items-center gap-3 select-none">
+                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/[0.09] to-white/[0.09]" />
+                      <span className="rounded-full border border-white/[0.08] bg-[#080a10] px-3 py-0.5 text-[10.5px] font-semibold tracking-wide text-slate-300 shadow-sm">
                         {formatDateDivider(msg.createdAt)}
                       </span>
-                      <div className="h-px flex-1 bg-gradient-to-l from-transparent via-white/[0.08] to-white/[0.08]" />
+                      <div className="h-px flex-1 bg-gradient-to-l from-transparent via-white/[0.09] to-white/[0.09]" />
                     </div>
                   )}
 
                   <div
-                    className={`group relative flex gap-3 rounded-xl px-2.5 py-1 transition hover:bg-white/[0.025] ${
+                    className={`group relative flex gap-3 rounded-xl px-3 py-1 transition hover:bg-white/[0.03] ${
                       isGrouped ? 'mt-0' : 'mt-2.5 pt-1.5'
                     }`}
                   >
                     {/* Ações no Hover */}
                     {!isEditing && (
-                      <div className="absolute -top-3.5 right-2 z-10 hidden items-center gap-0.5 rounded-xl border border-white/[0.1] bg-[#0c0f17]/95 p-0.5 shadow-xl backdrop-blur-md group-hover:flex">
+                      <div className="absolute -top-3.5 right-3 z-10 hidden items-center gap-0.5 rounded-xl border border-white/[0.1] bg-[#080a10]/95 p-0.5 shadow-xl backdrop-blur-md group-hover:flex">
                         {QUICK_EMOJIS.map((emoji) => (
                           <button
                             key={emoji}
@@ -656,7 +685,7 @@ export function ChatArea({
                           displayName={msg.author.displayName}
                           color={msg.author.avatarColor}
                           size="md"
-                          ringBg="border-[#11141d]"
+                          ringBg="border-[#0e121c]"
                         />
                       )}
                     </div>
@@ -664,10 +693,16 @@ export function ChatArea({
                     {/* Conteúdo da Mensagem */}
                     <div className="min-w-0 flex-1">
                       {!isGrouped && (
-                        <div className="mb-0.5 flex items-baseline gap-2">
-                          <span className="text-sm font-semibold tracking-tight text-white">
+                        <div className="mb-0.5 flex items-center gap-2">
+                          <span className="text-sm font-bold tracking-tight text-white">
                             {msg.author.displayName}
                           </span>
+                          {msg.author.role === 'admin' && (
+                            <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-400/25 bg-amber-500/12 px-1.5 py-0.2 text-[9px] font-bold uppercase text-amber-300">
+                              <Crown className="h-2.5 w-2.5" />
+                              Admin
+                            </span>
+                          )}
                           <span className="text-[11px] text-slate-500">
                             {formatMessageTimestamp(msg.createdAt)}
                           </span>
@@ -689,7 +724,7 @@ export function ChatArea({
                                 setEditingId(null);
                               }
                             }}
-                            className="w-full resize-none rounded-xl border border-indigo-500/60 bg-[#0a0d14] px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            className="w-full resize-none rounded-xl border border-indigo-500/60 bg-[#080a10] px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
                           />
                           <div className="flex items-center gap-2 text-[11px] text-slate-400">
                             <span>Enter para salvar • Esc para cancelar</span>
@@ -733,7 +768,7 @@ export function ChatArea({
                                   onClick={() =>
                                     setLightboxImage({ url: fullUrl, name: att.originalName })
                                   }
-                                  className="group/img overflow-hidden rounded-xl border border-white/[0.09] bg-[#0a0d14] shadow-md transition hover:border-indigo-400/50 hover:shadow-indigo-500/10"
+                                  className="group/img relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080a10] shadow-lg transition hover:border-indigo-400/50 hover:shadow-indigo-500/15"
                                 >
                                   <img
                                     src={fullUrl}
@@ -745,7 +780,7 @@ export function ChatArea({
                                         el.scrollTop = el.scrollHeight;
                                       }
                                     }}
-                                    className="max-h-72 max-w-sm object-contain transition duration-200 group-hover/img:brightness-105"
+                                    className="max-h-72 max-w-sm object-contain transition duration-200 group-hover/img:scale-[1.015] group-hover/img:brightness-105"
                                   />
                                 </button>
                               );
@@ -756,7 +791,7 @@ export function ChatArea({
                                 key={att.id}
                                 type="button"
                                 onClick={() => openExternalUrl(fullUrl)}
-                                className="flex items-center gap-2.5 rounded-xl border border-white/[0.09] bg-[#0a0d14] px-3 py-2 text-left shadow-sm transition hover:border-indigo-500/45 hover:bg-white/[0.04]"
+                                className="flex items-center gap-2.5 rounded-xl border border-white/[0.09] bg-[#080a10] px-3 py-2 text-left shadow-sm transition hover:border-indigo-500/45 hover:bg-white/[0.04]"
                               >
                                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
                                   <FileText className="h-4 w-4" />
@@ -786,10 +821,10 @@ export function ChatArea({
                                 key={r.emoji}
                                 type="button"
                                 onClick={() => void onToggleReaction(msg.id, r.emoji)}
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2 py-0.5 text-xs transition ${
+                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
                                   reactedByMe
                                     ? 'border-indigo-400/50 bg-indigo-500/20 text-indigo-100 shadow-sm'
-                                    : 'border-white/[0.08] bg-[#0a0d14]/85 text-slate-300 hover:border-white/20 hover:bg-white/[0.08]'
+                                    : 'border-white/[0.08] bg-[#080a10]/85 text-slate-300 hover:border-white/20 hover:bg-white/[0.08]'
                                 }`}
                               >
                                 <span>{r.emoji}</span>
@@ -825,7 +860,7 @@ export function ChatArea({
       </div>
 
       {/* Área de Composição */}
-      <div className="shrink-0 px-4 pb-4">
+      <div className="shrink-0 px-4 pb-3.5">
         {composerError && (
           <div className="mb-2 flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200">
             <span>{composerError}</span>
@@ -837,7 +872,7 @@ export function ChatArea({
 
         {/* Pré-visualização de Anexos */}
         {pendingUploads.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2 rounded-2xl border border-white/[0.08] bg-[#0a0d15]/90 p-2.5">
+          <div className="mb-2 flex flex-wrap gap-2 rounded-2xl border border-white/[0.08] bg-[#080a10]/90 p-2.5">
             {pendingUploads.map((item) => (
               <div
                 key={item.localId}
@@ -876,7 +911,7 @@ export function ChatArea({
           </div>
         )}
 
-        <div className="relative flex items-end gap-2 rounded-2xl border border-white/[0.09] bg-[#0a0d15]/95 px-3 py-2 shadow-inner transition focus-within:border-indigo-500/50 focus-within:ring-2 focus-within:ring-indigo-500/15">
+        <div className="relative flex items-end gap-2 rounded-2xl border border-white/[0.1] bg-[#080a10]/95 px-3 py-2.5 shadow-inner transition focus-within:border-indigo-500/60 focus-within:ring-2 focus-within:ring-indigo-500/15">
           {showEmojiPicker && (
             <div
               ref={emojiPopoverRef}
@@ -911,7 +946,7 @@ export function ChatArea({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Anexar arquivo ou imagem"
-            className="mb-0.5 rounded-xl p-1.5 text-slate-400 transition hover:bg-white/[0.08] hover:text-white"
+            className="mb-0.5 rounded-xl border border-white/[0.06] bg-white/[0.04] p-1.5 text-slate-300 transition hover:bg-white/[0.1] hover:text-white"
           >
             <Paperclip className="h-4 w-4" />
           </button>
@@ -927,7 +962,7 @@ export function ChatArea({
               lastTypingPingRef.current = 0;
               onTypingSignal(false);
             }}
-            placeholder={`Conversar em #${channel.name}`}
+            placeholder={`Conversar em #${channel.name}...`}
             className="max-h-36 min-h-[24px] flex-1 resize-none bg-transparent py-1 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
           />
 
@@ -953,7 +988,7 @@ export function ChatArea({
                 !pendingUploads.some((p) => p.status === 'ready'))
             }
             title="Enviar (Enter)"
-            className="mb-0.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 p-1.5 text-white shadow-md shadow-indigo-500/20 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-35 disabled:shadow-none"
+            className="mb-0.5 inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-35 disabled:shadow-none"
           >
             {sending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
