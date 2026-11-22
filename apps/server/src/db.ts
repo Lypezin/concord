@@ -8,6 +8,7 @@ import type {
   ChannelType,
   InviteInfo,
   Message,
+  MessageReplySummary,
   ReactionSummary,
   UserPublic,
   UserRole,
@@ -45,6 +46,7 @@ export interface MessageRow {
   channel_id: string;
   author_id: string;
   content: string;
+  reply_to_id?: string | null;
   edited_at: string | null;
   created_at: string;
 }
@@ -182,6 +184,7 @@ export function createDatabase(dataDir: string, uploadsDir: string): DatabaseSyn
       channel_id TEXT NOT NULL REFERENCES channels(id) ON DELETE CASCADE,
       author_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       content TEXT NOT NULL,
+      reply_to_id TEXT REFERENCES messages(id) ON DELETE SET NULL,
       edited_at TEXT,
       created_at TEXT NOT NULL
     );
@@ -212,6 +215,12 @@ export function createDatabase(dataDir: string, uploadsDir: string): DatabaseSyn
     );
   `);
 
+  // Migração segura para bancos existentes criados antes da v0.6.0
+  const msgCols = db.prepare('PRAGMA table_info(messages)').all() as Array<{ name: string }>;
+  if (!msgCols.some((c) => c.name === 'reply_to_id')) {
+    db.exec('ALTER TABLE messages ADD COLUMN reply_to_id TEXT REFERENCES messages(id) ON DELETE SET NULL');
+  }
+
   const countRow = db.prepare('SELECT COUNT(*) AS count FROM channels').get() as { count: number };
   if (countRow.count === 0) {
     const now = new Date().toISOString();
@@ -237,7 +246,41 @@ export function hydrateMessages(db: DatabaseSync, messageRows: MessageRow[]): Me
     return [];
   }
 
-  const authorIds = [...new Set(messageRows.map((m) => m.author_id))];
+  const replyIds = [
+    ...new Set(
+      messageRows
+        .map((m) => m.reply_to_id)
+        .filter((rid): rid is string => typeof rid === 'string' && rid.length > 0),
+    ),
+  ];
+
+  const replyRows =
+    replyIds.length > 0
+      ? (db
+          .prepare(
+            `SELECT id, author_id, content FROM messages WHERE id IN (${replyIds.map(() => '?').join(',')})`,
+          )
+          .all(...replyIds) as unknown as Array<{
+          id: string;
+          author_id: string;
+          content: string;
+        }>)
+      : [];
+
+  const replyAttachmentIds = new Set<string>();
+  if (replyRows.length > 0) {
+    const rPlaceholders = replyRows.map(() => '?').join(',');
+    const rAttRows = db
+      .prepare(`SELECT DISTINCT message_id FROM attachments WHERE message_id IN (${rPlaceholders})`)
+      .all(...replyRows.map((r) => r.id)) as Array<{ message_id: string }>;
+    for (const r of rAttRows) {
+      if (r.message_id) replyAttachmentIds.add(r.message_id);
+    }
+  }
+
+  const authorIds = [
+    ...new Set([...messageRows.map((m) => m.author_id), ...replyRows.map((r) => r.author_id)]),
+  ];
   const messageIds = messageRows.map((m) => m.id);
 
   const authorPlaceholders = authorIds.map(() => '?').join(',');
@@ -247,6 +290,19 @@ export function hydrateMessages(db: DatabaseSync, messageRows: MessageRow[]): Me
   const userMap = new Map<string, UserPublic>();
   for (const u of userRows) {
     userMap.set(u.id, toUserPublic(u));
+  }
+
+  const replyMap = new Map<string, MessageReplySummary>();
+  for (const rr of replyRows) {
+    const replyAuthor = userMap.get(rr.author_id);
+    replyMap.set(rr.id, {
+      id: rr.id,
+      authorId: rr.author_id,
+      authorName: replyAuthor?.displayName ?? 'Usuário',
+      authorColor: replyAuthor?.avatarColor ?? '#6366f1',
+      content: rr.content,
+      hasAttachments: replyAttachmentIds.has(rr.id),
+    });
   }
 
   const msgPlaceholders = messageIds.map(() => '?').join(',');
@@ -299,6 +355,8 @@ export function hydrateMessages(db: DatabaseSync, messageRows: MessageRow[]): Me
       content: row.content,
       attachments: attachmentMap.get(row.id) ?? [],
       reactions,
+      replyToId: row.reply_to_id ?? null,
+      replyTo: row.reply_to_id ? (replyMap.get(row.reply_to_id) ?? null) : null,
       editedAt: row.edited_at,
       createdAt: row.created_at,
     };

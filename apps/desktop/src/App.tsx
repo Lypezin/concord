@@ -9,10 +9,12 @@ import type {
   VoiceUserState,
 } from '@concord/shared';
 import { Loader2, RefreshCw, ServerOff, Volume2 } from 'lucide-react';
+import { Toaster, toast } from 'sonner';
 import type { SavedSession, UpdaterStatus } from './bridge-types.js';
 import { AuthScreen } from './components/AuthScreen.js';
 import { ChannelModal } from './components/ChannelModal.js';
 import { ChatArea } from './components/ChatArea.js';
+import { CommandPalette } from './components/CommandPalette.js';
 import { ConfirmModal } from './components/ConfirmModal.js';
 import { InviteModal } from './components/InviteModal.js';
 import { MemberList } from './components/MemberList.js';
@@ -67,10 +69,10 @@ export function App() {
   const [loadingOlder, setLoadingOlder] = useState(false);
 
   const [mutedNotifications, setMutedNotifications] = useState(() => loadMutedNotifications());
-  const [toast, setToast] = useState<string | null>(null);
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [showScreenPicker, setShowScreenPicker] = useState(false);
   const [showVoiceSettings, setShowVoiceSettings] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const [showMembers, setShowMembers] = useState(true);
   const [viewingVoiceStage, setViewingVoiceStage] = useState(false);
   const [focusedShareId, setFocusedShareId] = useState<string | null>(null);
@@ -103,11 +105,11 @@ export function App() {
     mutedRef.current = mutedNotifications;
   }, [mutedNotifications]);
 
-  const showToast = useCallback((msg: string) => {
-    setToast(msg);
-    setTimeout(() => {
-      setToast((cur) => (cur === msg ? null : cur));
-    }, 3800);
+  const handleCopyText = useCallback((text: string, label: string) => {
+    void navigator.clipboard
+      .writeText(text)
+      .then(() => toast.success(`${label} copiado.`))
+      .catch(() => toast.error('Não foi possível copiar para a área de transferência.'));
   }, []);
 
   // Escuta status de auto-atualização do Electron
@@ -192,10 +194,10 @@ export function App() {
 
   useEffect(() => {
     if (voiceError) {
-      showToast(voiceError);
+      toast.error(voiceError);
       clearVoiceError();
     }
-  }, [voiceError, clearVoiceError, showToast]);
+  }, [voiceError, clearVoiceError]);
 
   const loadChannelMessages = useCallback(
     async (channelId: string) => {
@@ -206,12 +208,12 @@ export function App() {
         setMessagesByChannel((prev) => ({ ...prev, [channelId]: page.messages }));
         setHasMoreByChannel((prev) => ({ ...prev, [channelId]: page.hasMore }));
       } catch (err) {
-        showToast(err instanceof Error ? err.message : 'Erro ao carregar mensagens.');
+        toast.error(err instanceof Error ? err.message : 'Erro ao carregar mensagens.');
       } finally {
         setLoadingMessages(false);
       }
     },
-    [api, showToast],
+    [api],
   );
 
   // Carrega dados iniciais e abre Socket.IO quando logado
@@ -220,6 +222,7 @@ export function App() {
 
     let cancelled = false;
     const currentUserId = session.user.id;
+    const currentUserRole = session.user.role;
 
     async function initWorkspace() {
       try {
@@ -231,7 +234,18 @@ export function App() {
         if (cancelled) return;
         setUsers(usersRes.users);
         setChannels(channelsRes.channels);
-        if (statusRes) setServerStatus(statusRes);
+        if (statusRes) {
+          setServerStatus(statusRes);
+          if (currentUserRole === 'admin' && statusRes.version) {
+            const [maj, min] = statusRes.version.split('.').map(Number);
+            if ((maj ?? 0) === 0 && (min ?? 0) < 6) {
+              toast.warning(
+                `Seu Concord Server ainda está na v${statusRes.version}. Reinicie o Iniciar-Concord-Server.bat para ativar exclusão/edição de canais, respostas e busca.`,
+                { duration: 9000 },
+              );
+            }
+          }
+        }
 
         const firstText = channelsRes.channels.find((c) => c.type === 'text');
         if (firstText) {
@@ -240,7 +254,7 @@ export function App() {
         }
       } catch (err) {
         if (!cancelled) {
-          showToast(err instanceof Error ? err.message : 'Erro ao carregar dados do servidor.');
+          toast.error(err instanceof Error ? err.message : 'Erro ao carregar dados do servidor.');
         }
       }
     }
@@ -348,8 +362,34 @@ export function App() {
     socket.on('channel:deleted', ({ channelId }) => {
       if (connectedVoiceIdRef.current === channelId) {
         void voice.leaveVoice(true);
-        showToast('O canal de voz em que você estava foi excluído.');
+        toast.info('O canal de voz em que você estava foi excluído.');
       }
+
+      setMessagesByChannel((prev) => {
+        if (!(channelId in prev)) return prev;
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+      setHasMoreByChannel((prev) => {
+        if (!(channelId in prev)) return prev;
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+      setUnreadCounts((prev) => {
+        if (!(channelId in prev)) return prev;
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+      setTypingByChannel((prev) => {
+        if (!(channelId in prev)) return prev;
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
+
       setChannels((prev) => {
         const next = prev.filter((c) => c.id !== channelId);
         if (activeChannelIdRef.current === channelId) {
@@ -406,7 +446,11 @@ export function App() {
         if (!list) return prev;
         return {
           ...prev,
-          [channelId]: list.filter((m) => m.id !== messageId),
+          [channelId]: list
+            .filter((m) => m.id !== messageId)
+            .map((m) =>
+              m.replyToId === messageId ? { ...m, replyToId: null, replyTo: null } : m,
+            ),
         };
       });
     });
@@ -464,6 +508,22 @@ export function App() {
     }
   }
 
+  function handleWatchScreenShare(participantId: string): void {
+    if (!session) return;
+    const ownerChannel = Object.entries(voiceParticipants).find(([, ids]) =>
+      ids.includes(participantId),
+    )?.[0];
+    if (ownerChannel && voice.connectedChannelId !== ownerChannel) {
+      void voice.joinVoice(ownerChannel);
+    }
+    setFocusedShareId(
+      participantId === session.user.id
+        ? `local-${participantId}`
+        : `remote-${participantId}`,
+    );
+    setViewingVoiceStage(true);
+  }
+
   async function handleLoadOlder(): Promise<void> {
     if (!api || !activeChannelId || loadingOlder) return;
     const current = messagesByChannel[activeChannelId] ?? [];
@@ -484,7 +544,7 @@ export function App() {
       });
       setHasMoreByChannel((prev) => ({ ...prev, [activeChannelId]: page.hasMore }));
     } catch (err) {
-      showToast(err instanceof Error ? err.message : 'Erro ao carregar histórico.');
+      toast.error(err instanceof Error ? err.message : 'Erro ao carregar histórico.');
     } finally {
       setLoadingOlder(false);
     }
@@ -528,323 +588,365 @@ export function App() {
 
   return (
     <TooltipProvider>
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0c0c0e] text-zinc-100">
-      <TitleBar
-        connectionState={session ? connectionState : null}
-        serverName={serverStatus?.serverName || 'Concord'}
-        connectedVoiceChannelName={connectedVoiceChannel?.name ?? null}
-        onClickVoicePill={() => setViewingVoiceStage((prev) => !prev)}
-        updaterStatus={updaterStatus}
-        onInstallUpdate={() => void window.concordAPI?.installUpdate()}
-      />
+      <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0c0c0e] text-zinc-100">
+        <TitleBar
+          connectionState={session ? connectionState : null}
+          serverName={serverStatus?.serverName || 'Concord'}
+          connectedVoiceChannelName={connectedVoiceChannel?.name ?? null}
+          onClickVoicePill={() => setViewingVoiceStage((prev) => !prev)}
+          onOpenCommandPalette={session ? () => setShowCommandPalette(true) : undefined}
+          updaterStatus={updaterStatus}
+          onInstallUpdate={() => void window.concordAPI?.installUpdate()}
+        />
 
-      {bootstrapping ? (
-        <div className="flex flex-1 items-center justify-center bg-[#0c0c0e]">
-          <div className="flex flex-col items-center gap-2.5">
-            <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
-            <span className="text-xs font-medium text-zinc-500">
-              Iniciando Concord...
-            </span>
-          </div>
-        </div>
-      ) : !session && pendingOfflineSession ? (
-        <div className="flex flex-1 items-center justify-center bg-[#0c0c0e] p-6">
-          <div className="concord-panel w-full max-w-md space-y-5 rounded-xl border border-white/[0.08] bg-[#16161b] p-6 text-center">
-            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-300">
-              <ServerOff className="h-5 w-5" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold tracking-tight text-white">
-                Aguardando o servidor ficar online...
-              </h2>
-              <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
-                Tentando reconectar em{' '}
-                <span className="rounded border border-white/[0.08] bg-[#0c0c0e] px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">
-                  {pendingOfflineSession.serverUrl}
-                </span>{' '}
-                automaticamente a cada 4 segundos.
-              </p>
-            </div>
-
-            <div className="flex flex-col gap-2">
-              <button
-                type="button"
-                disabled={retryingOffline}
-                onClick={() => {
-                  setRetryingOffline(true);
-                  void attemptSessionRestore(pendingOfflineSession).finally(() =>
-                    setRetryingOffline(false),
-                  );
-                }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#5865f2] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
-              >
-                {retryingOffline ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <RefreshCw className="h-4 w-4" />
-                )}
-                Tentar Agora
-              </button>
-
-              <button
-                type="button"
-                onClick={() => void handleLogout()}
-                className="rounded-lg border border-white/[0.08] bg-[#202027] px-4 py-2 text-xs font-medium text-zinc-300 transition hover:bg-[#292932] hover:text-white"
-              >
-                Trocar de servidor / Sair
-              </button>
+        {bootstrapping ? (
+          <div className="flex flex-1 items-center justify-center bg-[#0c0c0e]">
+            <div className="flex flex-col items-center gap-2.5">
+              <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+              <span className="text-xs font-medium text-zinc-500">
+                Iniciando Concord...
+              </span>
             </div>
           </div>
-        </div>
-      ) : !session || !api ? (
-        <AuthScreen onAuthenticated={(url, auth, st) => void handleAuthenticated(url, auth, st)} />
-      ) : (
-        <div className="flex min-h-0 flex-1 bg-[#141418]">
-          <Sidebar
-            serverName={serverStatus?.serverName || 'Concord'}
-            userCount={users.length || serverStatus?.userCount || 1}
-            maxUsers={serverStatus?.maxUsers || 4}
-            currentUser={session.user}
-            users={users}
-            channels={channels}
-            activeChannelId={activeChannelId}
-            unreadCounts={unreadCounts}
-            mutedNotifications={mutedNotifications}
-            connectedVoiceChannelId={voice.connectedChannelId}
-            voiceConnectionState={voice.voiceState}
-            connectedAt={voice.connectedAt}
-            totalUnreadCount={totalUnreadCount}
-            voiceParticipants={voiceParticipants}
-            voiceStates={voiceStates}
-            speakingUserIds={voice.speakingUserIds}
-            muted={voice.muted}
-            deafened={voice.deafened}
-            screenSharing={voice.screenSharing}
-            viewingVoiceStage={viewingVoiceStage}
-            userVolumes={voice.settings.userVolumes}
-            onSelectChannel={handleSelectChannel}
-            onOpenCreateChannel={(type) => setChannelModal({ mode: 'create', type })}
-            onOpenRenameChannel={(channel) => setChannelModal({ mode: 'rename', channel })}
-            onDeleteChannel={(channel) => setDeleteChannelTarget(channel)}
-            onOpenInvites={() => setShowInviteModal(true)}
-            onToggleMuteNotifications={() => {
-              const next = !mutedNotifications;
-              setMutedNotifications(next);
-              saveMutedNotifications(next);
-            }}
-            onLogout={() => void handleLogout()}
-            onToggleMute={() => void voice.toggleMute()}
-            onToggleDeafen={() => void voice.toggleDeafen()}
-            onOpenVoiceSettings={() => setShowVoiceSettings(true)}
-            onToggleVoiceStage={() => setViewingVoiceStage((prev) => !prev)}
-            onStartScreenShare={() => setShowScreenPicker(true)}
-            onStopScreenShare={() => void voice.stopScreenShare()}
-            onDisconnectVoice={() => void voice.leaveVoice(true)}
-            onWatchScreenShare={(participantId) => {
-              const ownerChannel = Object.entries(voiceParticipants).find(([, ids]) =>
-                ids.includes(participantId),
-              )?.[0];
-              if (ownerChannel && voice.connectedChannelId !== ownerChannel) {
-                void voice.joinVoice(ownerChannel);
-              }
-              setFocusedShareId(
-                participantId === session.user.id
-                  ? `local-${participantId}`
-                  : `remote-${participantId}`,
-              );
-              setViewingVoiceStage(true);
-            }}
-            onSetUserVolume={voice.setUserVolume}
-          />
+        ) : !session && pendingOfflineSession ? (
+          <div className="flex flex-1 items-center justify-center bg-[#0c0c0e] p-6">
+            <div className="concord-panel w-full max-w-md space-y-5 rounded-xl border border-white/[0.08] bg-[#16161b] p-6 text-center">
+              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-300">
+                <ServerOff className="h-5 w-5" />
+              </div>
+              <div>
+                <h2 className="text-base font-semibold tracking-tight text-white">
+                  Aguardando o servidor ficar online...
+                </h2>
+                <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
+                  Tentando reconectar em{' '}
+                  <span className="rounded border border-white/[0.08] bg-[#0c0c0e] px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">
+                    {pendingOfflineSession.serverUrl}
+                  </span>{' '}
+                  automaticamente a cada 4 segundos.
+                </p>
+              </div>
 
-          {viewingVoiceStage && connectedVoiceChannel ? (
-            <VoiceStage
-              channel={connectedVoiceChannel}
+              <div className="flex flex-col gap-2">
+                <button
+                  type="button"
+                  disabled={retryingOffline}
+                  onClick={() => {
+                    setRetryingOffline(true);
+                    void attemptSessionRestore(pendingOfflineSession).finally(() =>
+                      setRetryingOffline(false),
+                    );
+                  }}
+                  className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#5865f2] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
+                >
+                  {retryingOffline ? (
+                    <Loader2 className="h-4 w-4 animate-spin" />
+                  ) : (
+                    <RefreshCw className="h-4 w-4" />
+                  )}
+                  Tentar Agora
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => void handleLogout()}
+                  className="rounded-lg border border-white/[0.08] bg-[#202027] px-4 py-2 text-xs font-medium text-zinc-300 transition hover:bg-[#292932] hover:text-white"
+                >
+                  Trocar de servidor / Sair
+                </button>
+              </div>
+            </div>
+          </div>
+        ) : !session || !api ? (
+          <AuthScreen onAuthenticated={(url, auth, st) => void handleAuthenticated(url, auth, st)} />
+        ) : (
+          <div className="flex min-h-0 flex-1 bg-[#141418]">
+            <Sidebar
+              serverName={serverStatus?.serverName || 'Concord'}
+              userCount={users.length || serverStatus?.userCount || 1}
+              maxUsers={serverStatus?.maxUsers || 4}
               currentUser={session.user}
-              participants={voiceChannelParticipants}
+              users={users}
+              channels={channels}
+              activeChannelId={activeChannelId}
+              unreadCounts={unreadCounts}
+              mutedNotifications={mutedNotifications}
+              connectedVoiceChannelId={voice.connectedChannelId}
+              voiceConnectionState={voice.voiceState}
+              connectedAt={voice.connectedAt}
+              voiceTelemetry={voice.telemetry}
+              rnnoiseEnabled={voice.settings.rnnoiseEnabled}
+              totalUnreadCount={totalUnreadCount}
+              voiceParticipants={voiceParticipants}
               voiceStates={voiceStates}
               speakingUserIds={voice.speakingUserIds}
-              screenShares={voice.screenShares}
-              screenSharing={voice.screenSharing}
               muted={voice.muted}
               deafened={voice.deafened}
-              settings={voice.settings}
+              screenSharing={voice.screenSharing}
+              viewingVoiceStage={viewingVoiceStage}
               userVolumes={voice.settings.userVolumes}
-              streamVolumes={voice.settings.streamVolumes}
-              focusedShareId={focusedShareId}
-              totalUnreadCount={totalUnreadCount}
-              onSelectFocusShare={setFocusedShareId}
-              onSetUserVolume={voice.setUserVolume}
-              onSetStreamVolume={voice.setStreamVolume}
-              onUpdateSettings={voice.updateSettings}
+              onSelectChannel={handleSelectChannel}
+              onOpenCreateChannel={(type) => setChannelModal({ mode: 'create', type })}
+              onOpenRenameChannel={(channel) => setChannelModal({ mode: 'rename', channel })}
+              onDeleteChannel={(channel) => setDeleteChannelTarget(channel)}
+              onOpenInvites={() => setShowInviteModal(true)}
+              onOpenCommandPalette={() => setShowCommandPalette(true)}
+              onToggleMuteNotifications={() => {
+                const next = !mutedNotifications;
+                setMutedNotifications(next);
+                saveMutedNotifications(next);
+                toast.info(next ? 'Notificações silenciadas.' : 'Notificações ativadas.');
+              }}
+              onLogout={() => void handleLogout()}
               onToggleMute={() => void voice.toggleMute()}
               onToggleDeafen={() => void voice.toggleDeafen()}
+              onOpenVoiceSettings={() => setShowVoiceSettings(true)}
+              onToggleVoiceStage={() => setViewingVoiceStage((prev) => !prev)}
               onStartScreenShare={() => setShowScreenPicker(true)}
               onStopScreenShare={() => void voice.stopScreenShare()}
               onDisconnectVoice={() => void voice.leaveVoice(true)}
-              onOpenSettings={() => setShowVoiceSettings(true)}
-              onBackToChat={() => setViewingVoiceStage(false)}
+              onWatchScreenShare={handleWatchScreenShare}
+              onSetUserVolume={voice.setUserVolume}
+              onCopyText={handleCopyText}
             />
-          ) : activeChannel ? (
-            <ChatArea
-              api={api}
-              channel={activeChannel}
-              currentUser={session.user}
-              messages={messagesByChannel[activeChannel.id] ?? []}
-              hasMore={hasMoreByChannel[activeChannel.id] ?? false}
-              loadingMessages={loadingMessages && !messagesByChannel[activeChannel.id]}
-              loadingOlder={loadingOlder}
-              typingUsers={activeTypingUsers}
-              showMembers={showMembers}
-              onToggleMembers={() => setShowMembers((prev) => !prev)}
-              onLoadOlder={handleLoadOlder}
-              onSendMessage={async (content, attachmentIds) => {
-                await api.sendMessage(activeChannel.id, { content, attachmentIds });
-              }}
-              onEditMessage={async (messageId, content) => {
-                await api.editMessage(messageId, content);
-              }}
-              onDeleteMessage={async (messageId) => {
-                try {
-                  await api.deleteMessage(messageId);
-                } catch (err) {
-                  showToast(err instanceof Error ? err.message : 'Erro ao excluir mensagem.');
+
+            {viewingVoiceStage && connectedVoiceChannel ? (
+              <VoiceStage
+                channel={connectedVoiceChannel}
+                currentUser={session.user}
+                participants={voiceChannelParticipants}
+                voiceStates={voiceStates}
+                speakingUserIds={voice.speakingUserIds}
+                screenShares={voice.screenShares}
+                screenSharing={voice.screenSharing}
+                muted={voice.muted}
+                deafened={voice.deafened}
+                settings={voice.settings}
+                userVolumes={voice.settings.userVolumes}
+                streamVolumes={voice.settings.streamVolumes}
+                focusedShareId={focusedShareId}
+                totalUnreadCount={totalUnreadCount}
+                onSelectFocusShare={setFocusedShareId}
+                onSetUserVolume={voice.setUserVolume}
+                onSetStreamVolume={voice.setStreamVolume}
+                onUpdateSettings={voice.updateSettings}
+                onToggleMute={() => void voice.toggleMute()}
+                onToggleDeafen={() => void voice.toggleDeafen()}
+                onStartScreenShare={() => setShowScreenPicker(true)}
+                onStopScreenShare={() => void voice.stopScreenShare()}
+                onDisconnectVoice={() => void voice.leaveVoice(true)}
+                onOpenSettings={() => setShowVoiceSettings(true)}
+                onBackToChat={() => setViewingVoiceStage(false)}
+              />
+            ) : activeChannel ? (
+              <ChatArea
+                api={api}
+                channel={activeChannel}
+                currentUser={session.user}
+                messages={messagesByChannel[activeChannel.id] ?? []}
+                hasMore={hasMoreByChannel[activeChannel.id] ?? false}
+                loadingMessages={loadingMessages && !messagesByChannel[activeChannel.id]}
+                loadingOlder={loadingOlder}
+                typingUsers={activeTypingUsers}
+                showMembers={showMembers}
+                onToggleMembers={() => setShowMembers((prev) => !prev)}
+                onLoadOlder={handleLoadOlder}
+                onSendMessage={async (content, attachmentIds, replyToId) => {
+                  await api.sendMessage(activeChannel.id, {
+                    content,
+                    attachmentIds,
+                    replyToId: replyToId ?? undefined,
+                  });
+                }}
+                onEditMessage={async (messageId, content) => {
+                  await api.editMessage(messageId, content);
+                }}
+                onDeleteMessage={async (messageId) => {
+                  try {
+                    await api.deleteMessage(messageId);
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Erro ao excluir mensagem.');
+                  }
+                }}
+                onToggleReaction={async (messageId, emoji) => {
+                  try {
+                    await api.toggleReaction(messageId, emoji);
+                  } catch (err) {
+                    toast.error(err instanceof Error ? err.message : 'Erro ao atualizar reação.');
+                  }
+                }}
+                onTypingSignal={(isTyping) => {
+                  if (!socketInstance || !socketInstance.connected) return;
+                  socketInstance.emit(isTyping ? 'typing:start' : 'typing:stop', {
+                    channelId: activeChannel.id,
+                  });
+                }}
+              />
+            ) : (
+              <div className="flex flex-1 flex-col items-center justify-center bg-[#141418] text-zinc-400">
+                <Volume2 className="mb-2 h-8 w-8 text-zinc-500" />
+                <p className="text-sm">Selecione um canal de texto para conversar.</p>
+              </div>
+            )}
+
+            {showMembers && (
+              <MemberList
+                users={users}
+                onlineUserIds={onlineUserIds}
+                channels={channels}
+                voiceParticipants={voiceParticipants}
+                voiceStates={voiceStates}
+                onWatchScreenShare={handleWatchScreenShare}
+                onCopyText={handleCopyText}
+              />
+            )}
+
+            {activePipShare && (
+              <PipStreamPlayer
+                share={activePipShare}
+                streamerName={
+                  users.find((u) => u.id === activePipShare.participantId)?.displayName ??
+                  activePipShare.participantName
                 }
-              }}
-              onToggleReaction={async (messageId, emoji) => {
-                try {
-                  await api.toggleReaction(messageId, emoji);
-                } catch (err) {
-                  showToast(err instanceof Error ? err.message : 'Erro ao atualizar reação.');
+                streamVolume={voice.settings.streamVolumes[activePipShare.participantId] ?? 100}
+                onToggleMuteStream={() => {
+                  const cur = voice.settings.streamVolumes[activePipShare.participantId] ?? 100;
+                  voice.setStreamVolume(activePipShare.participantId, cur > 0 ? 0 : 100);
+                }}
+                onExpandToStage={() => {
+                  setFocusedShareId(activePipShare.id);
+                  setViewingVoiceStage(true);
+                }}
+              />
+            )}
+          </div>
+        )}
+
+        <Toaster
+          theme="dark"
+          position="bottom-right"
+          richColors
+          closeButton
+          toastOptions={{
+            style: {
+              background: '#18181d',
+              border: '1px solid rgba(255,255,255,0.1)',
+              color: '#f4f4f5',
+            },
+          }}
+        />
+
+        {session && (
+          <CommandPalette
+            open={showCommandPalette}
+            onOpenChange={setShowCommandPalette}
+            channels={channels}
+            isAdmin={session.user.role === 'admin'}
+            inVoiceCall={Boolean(connectedVoiceChannel)}
+            muted={voice.muted}
+            deafened={voice.deafened}
+            screenSharing={voice.screenSharing}
+            showMembers={showMembers}
+            onSelectChannel={handleSelectChannel}
+            onToggleMute={() => void voice.toggleMute()}
+            onToggleDeafen={() => void voice.toggleDeafen()}
+            onStartScreenShare={() => setShowScreenPicker(true)}
+            onStopScreenShare={() => void voice.stopScreenShare()}
+            onDisconnectVoice={() => void voice.leaveVoice(true)}
+            onOpenVoiceStage={() => setViewingVoiceStage(true)}
+            onOpenSettings={() => setShowVoiceSettings(true)}
+            onOpenInvites={() => setShowInviteModal(true)}
+            onOpenCreateChannel={(type) => setChannelModal({ mode: 'create', type })}
+            onToggleMembers={() => setShowMembers((prev) => !prev)}
+          />
+        )}
+
+        {showInviteModal && api && session && (
+          <InviteModal
+            api={api}
+            currentServerUrl={session.serverUrl}
+            onClose={() => setShowInviteModal(false)}
+          />
+        )}
+
+        {showScreenPicker && (
+          <ScreenPickerModal
+            onClose={() => setShowScreenPicker(false)}
+            onStartShare={async (opts) => {
+              await voice.startScreenShare(opts);
+              setViewingVoiceStage(true);
+            }}
+          />
+        )}
+
+        {showVoiceSettings && session && api && (
+          <VoiceSettingsModal
+            currentUser={session.user}
+            settings={voice.settings}
+            shortcutStatus={voice.shortcutStatus}
+            onUpdateProfile={async (body) => {
+              const res = await api.updateProfile(body);
+              setSession((prev) => (prev ? { ...prev, user: res.user } : prev));
+              setUsers((prev) => prev.map((u) => (u.id === res.user.id ? res.user : u)));
+              toast.success('Perfil atualizado.');
+            }}
+            onUpdateSettings={voice.updateSettings}
+            onClose={() => setShowVoiceSettings(false)}
+          />
+        )}
+
+        {deleteChannelTarget && api && (
+          <ConfirmModal
+            title="Excluir canal"
+            message={`Tem certeza que deseja excluir ${
+              deleteChannelTarget.type === 'text'
+                ? `#${deleteChannelTarget.name}`
+                : deleteChannelTarget.name
+            }? Todas as mensagens deste canal serão apagadas permanentemente.`}
+            confirmLabel="Excluir Canal"
+            onClose={() => setDeleteChannelTarget(null)}
+            onConfirm={async () => {
+              try {
+                await api.deleteChannel(deleteChannelTarget.id);
+                toast.success(
+                  `Canal ${deleteChannelTarget.type === 'text' ? `#${deleteChannelTarget.name}` : deleteChannelTarget.name} excluído.`,
+                );
+              } catch (err) {
+                toast.error(err instanceof Error ? err.message : 'Erro ao excluir canal.');
+              }
+            }}
+          />
+        )}
+
+        {channelModal && api && (
+          <ChannelModal
+            mode={channelModal.mode}
+            initialType={channelModal.mode === 'create' ? channelModal.type : undefined}
+            channel={channelModal.mode === 'rename' ? channelModal.channel : undefined}
+            onClose={() => setChannelModal(null)}
+            onSubmit={async ({ name, type }) => {
+              if (channelModal.mode === 'create') {
+                const res = await api.createChannel({ name, type });
+                if (res.channel.type === 'text') {
+                  setMessagesByChannel((prev) => ({
+                    ...prev,
+                    [res.channel.id]: prev[res.channel.id] ?? [],
+                  }));
+                  setHasMoreByChannel((prev) => ({ ...prev, [res.channel.id]: false }));
+                  setViewingVoiceStage(false);
+                  setActiveChannelId(res.channel.id);
                 }
-              }}
-              onTypingSignal={(isTyping) => {
-                if (!socketInstance || !socketInstance.connected) return;
-                socketInstance.emit(isTyping ? 'typing:start' : 'typing:stop', {
-                  channelId: activeChannel.id,
-                });
-              }}
-            />
-          ) : (
-            <div className="flex flex-1 flex-col items-center justify-center bg-[#141418] text-zinc-400">
-              <Volume2 className="mb-2 h-8 w-8 text-zinc-500" />
-              <p className="text-sm">Selecione um canal de texto para conversar.</p>
-            </div>
-          )}
-
-          {showMembers && (
-            <MemberList
-              users={users}
-              onlineUserIds={onlineUserIds}
-              channels={channels}
-              voiceParticipants={voiceParticipants}
-              voiceStates={voiceStates}
-            />
-          )}
-
-          {activePipShare && (
-            <PipStreamPlayer
-              share={activePipShare}
-              streamerName={
-                users.find((u) => u.id === activePipShare.participantId)?.displayName ??
-                activePipShare.participantName
+                toast.success(
+                  `Canal ${res.channel.type === 'text' ? `#${res.channel.name}` : res.channel.name} criado.`,
+                );
+              } else {
+                const res = await api.updateChannel(channelModal.channel.id, { name });
+                toast.success(`Canal renomeado para ${res.channel.name}.`);
               }
-              streamVolume={voice.settings.streamVolumes[activePipShare.participantId] ?? 100}
-              onToggleMuteStream={() => {
-                const cur = voice.settings.streamVolumes[activePipShare.participantId] ?? 100;
-                voice.setStreamVolume(activePipShare.participantId, cur > 0 ? 0 : 100);
-              }}
-              onExpandToStage={() => {
-                setFocusedShareId(activePipShare.id);
-                setViewingVoiceStage(true);
-              }}
-            />
-          )}
-        </div>
-      )}
-
-      {toast && (
-        <div className="animate-toast-in fixed bottom-5 left-1/2 z-50 rounded-lg border border-white/[0.1] bg-[#18181d] px-4 py-2 text-xs font-medium text-zinc-100 shadow-2xl">
-          {toast}
-        </div>
-      )}
-
-      {showInviteModal && api && session && (
-        <InviteModal
-          api={api}
-          currentServerUrl={session.serverUrl}
-          onClose={() => setShowInviteModal(false)}
-        />
-      )}
-
-      {showScreenPicker && (
-        <ScreenPickerModal
-          onClose={() => setShowScreenPicker(false)}
-          onStartShare={async (opts) => {
-            await voice.startScreenShare(opts);
-            setViewingVoiceStage(true);
-          }}
-        />
-      )}
-
-      {showVoiceSettings && session && api && (
-        <VoiceSettingsModal
-          currentUser={session.user}
-          settings={voice.settings}
-          shortcutStatus={voice.shortcutStatus}
-          onUpdateProfile={async (body) => {
-            const res = await api.updateProfile(body);
-            setSession((prev) => (prev ? { ...prev, user: res.user } : prev));
-            setUsers((prev) => prev.map((u) => (u.id === res.user.id ? res.user : u)));
-          }}
-          onUpdateSettings={voice.updateSettings}
-          onClose={() => setShowVoiceSettings(false)}
-        />
-      )}
-
-      {deleteChannelTarget && api && (
-        <ConfirmModal
-          title="Excluir canal"
-          message={`Tem certeza que deseja excluir ${
-            deleteChannelTarget.type === 'text' ? `#${deleteChannelTarget.name}` : deleteChannelTarget.name
-          }? Todas as mensagens deste canal serão apagadas permanentemente.`}
-          confirmLabel="Excluir Canal"
-          onClose={() => setDeleteChannelTarget(null)}
-          onConfirm={async () => {
-            try {
-              await api.deleteChannel(deleteChannelTarget.id);
-            } catch (err) {
-              showToast(err instanceof Error ? err.message : 'Erro ao excluir canal.');
-            }
-          }}
-        />
-      )}
-
-      {channelModal && api && (
-        <ChannelModal
-          mode={channelModal.mode}
-          initialType={channelModal.mode === 'create' ? channelModal.type : undefined}
-          channel={channelModal.mode === 'rename' ? channelModal.channel : undefined}
-          onClose={() => setChannelModal(null)}
-          onSubmit={async ({ name, type }) => {
-            if (channelModal.mode === 'create') {
-              const res = await api.createChannel({ name, type });
-              if (res.channel.type === 'text') {
-                setMessagesByChannel((prev) => ({
-                  ...prev,
-                  [res.channel.id]: prev[res.channel.id] ?? [],
-                }));
-                setHasMoreByChannel((prev) => ({ ...prev, [res.channel.id]: false }));
-                setViewingVoiceStage(false);
-                setActiveChannelId(res.channel.id);
-              }
-            } else {
-              await api.updateChannel(channelModal.channel.id, { name });
-            }
-          }}
-        />
-      )}
-    </div>
+            }}
+          />
+        )}
+      </div>
     </TooltipProvider>
   );
 }

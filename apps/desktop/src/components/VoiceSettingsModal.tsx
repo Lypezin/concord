@@ -87,7 +87,7 @@ export function VoiceSettingsModal({
   const loopbackGainRef = useRef<GainNode | null>(null);
 
   const [tailscaleStatus, setTailscaleStatus] = useState<TailscaleStatus | null>(null);
-  const [appVersion, setAppVersion] = useState<string>('0.5.0');
+  const [appVersion, setAppVersion] = useState<string>('0.6.0');
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
 

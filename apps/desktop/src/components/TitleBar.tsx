@@ -1,4 +1,4 @@
-import { Download, Volume2 } from 'lucide-react';
+import { Download, Search, Volume2 } from 'lucide-react';
 import type { UpdaterStatus } from '../bridge-types.js';
 import type { SocketConnectionState } from '../lib/socket.js';
 
@@ -7,6 +7,7 @@ interface TitleBarProps {
   serverName?: string;
   connectedVoiceChannelName?: string | null;
   onClickVoicePill?: () => void;
+  onOpenCommandPalette?: () => void;
   updaterStatus?: UpdaterStatus | null;
   onInstallUpdate?: () => void;
 }
@@ -16,6 +17,7 @@ export function TitleBar({
   serverName = 'Concord',
   connectedVoiceChannelName,
   onClickVoicePill,
+  onOpenCommandPalette,
   updaterStatus,
   onInstallUpdate,
 }: TitleBarProps) {
@@ -70,16 +72,32 @@ export function TitleBar({
         )}
       </div>
 
-      {updaterStatus?.state === 'downloaded' && onInstallUpdate && (
-        <button
-          type="button"
-          onClick={onInstallUpdate}
-          className="app-no-drag inline-flex shrink-0 items-center gap-1.5 rounded-md bg-[#23a55a] px-2.5 py-0.5 text-[11px] font-semibold text-white transition hover:bg-[#1e8e4d]"
-        >
-          <Download className="h-3 w-3" />
-          Atualização v{updaterStatus.version} pronta — Reiniciar
-        </button>
-      )}
+      <div className="flex items-center gap-2">
+        {connectionState && onOpenCommandPalette && (
+          <button
+            type="button"
+            onClick={onOpenCommandPalette}
+            className="app-no-drag hidden items-center gap-2 rounded-md border border-white/[0.07] bg-[#141418] px-2.5 py-0.5 text-[11px] text-zinc-400 transition hover:border-white/[0.14] hover:text-zinc-200 md:inline-flex"
+          >
+            <Search className="h-3 w-3" />
+            <span>Busca rápida</span>
+            <kbd className="rounded border border-white/[0.09] bg-[#0c0c0e] px-1 font-mono text-[9px] text-zinc-400">
+              Ctrl+K
+            </kbd>
+          </button>
+        )}
+
+        {updaterStatus?.state === 'downloaded' && onInstallUpdate && (
+          <button
+            type="button"
+            onClick={onInstallUpdate}
+            className="app-no-drag inline-flex shrink-0 items-center gap-1.5 rounded-md bg-[#23a55a] px-2.5 py-0.5 text-[11px] font-semibold text-white transition hover:bg-[#1e8e4d]"
+          >
+            <Download className="h-3 w-3" />
+            Atualização v{updaterStatus.version} pronta — Reiniciar
+          </button>
+        )}
+      </div>
     </header>
   );
 }

@@ -46,7 +46,7 @@ export function ModalDialog({
             if (preventClose) e.preventDefault();
           }}
           className={cn(
-            'concord-panel animate-modal-in fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#16161b] text-zinc-100 focus:outline-none',
+            'concord-panel animate-dialog-in fixed left-1/2 top-1/2 z-50 flex max-h-[88vh] w-[calc(100vw-2rem)] -translate-x-1/2 -translate-y-1/2 flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#16161b] text-zinc-100 focus:outline-none',
             maxWidthClass,
           )}
         >

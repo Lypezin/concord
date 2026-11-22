@@ -75,6 +75,44 @@ export function registerMessageRoutes(fastify: FastifyInstance, ctx: RouteContex
     return reply.send({ messages, hasMore } satisfies MessagesPage);
   });
 
+  fastify.get('/api/channels/:id/messages/search', async (req, reply) => {
+    const user = auth.requireAuth(req, reply);
+    if (!user) return;
+
+    const { id: channelId } = req.params as { id: string };
+    const query = req.query as { q?: string; limit?: string };
+
+    const channel = db.prepare('SELECT * FROM channels WHERE id = ?').get(channelId) as unknown as
+      | ChannelRow
+      | undefined;
+    if (!channel || channel.type !== 'text') {
+      return reply.code(404).send({ error: 'Canal de texto não encontrado.' });
+    }
+
+    const q = (query.q ?? '').trim();
+    if (!q) {
+      return reply.send({ messages: [] });
+    }
+
+    const parsedLimit = Number.parseInt(query.limit ?? '30', 10);
+    const limit = Number.isFinite(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 50) : 30;
+    const escaped = q.replace(/[\\%_]/g, (m) => `\\${m}`);
+    const likePattern = `%${escaped}%`;
+
+    const rows = db
+      .prepare(
+        `SELECT * FROM messages
+         WHERE channel_id = ?
+           AND content LIKE ? ESCAPE '\\'
+         ORDER BY created_at DESC, id DESC
+         LIMIT ?`,
+      )
+      .all(channelId, likePattern, limit) as unknown as MessageRow[];
+
+    const messages = hydrateMessages(db, rows);
+    return reply.send({ messages });
+  });
+
   fastify.post('/api/channels/:id/messages', async (req, reply) => {
     const user = auth.requireAuth(req, reply);
     if (!user) return;
@@ -110,13 +148,24 @@ export function registerMessageRoutes(fastify: FastifyInstance, ctx: RouteContex
           }
         }
 
+        let validReplyToId: string | null = null;
+        if (input.replyToId) {
+          const parent = db
+            .prepare('SELECT id FROM messages WHERE id = ? AND channel_id = ?')
+            .get(input.replyToId, channelId) as { id: string } | undefined;
+          if (!parent) {
+            throw new HttpError(400, 'Mensagem original para resposta não encontrada neste canal.');
+          }
+          validReplyToId = parent.id;
+        }
+
         const id = crypto.randomUUID();
         const now = new Date().toISOString();
         const trimmedContent = input.content.trim();
 
         db.prepare(
-          'INSERT INTO messages (id, channel_id, author_id, content, edited_at, created_at) VALUES (?, ?, ?, ?, NULL, ?)',
-        ).run(id, channelId, user.id, trimmedContent, now);
+          'INSERT INTO messages (id, channel_id, author_id, content, reply_to_id, edited_at, created_at) VALUES (?, ?, ?, ?, ?, NULL, ?)',
+        ).run(id, channelId, user.id, trimmedContent, validReplyToId, now);
 
         if (attachmentIds.length > 0) {
           const updateAtt = db.prepare('UPDATE attachments SET message_id = ? WHERE id = ?');

@@ -11,13 +11,19 @@ import {
 } from 'react';
 import type { Attachment, Channel, Message, UserPublic } from '@concord/shared';
 import {
+  ArrowDown,
+  Check,
   ChevronUp,
+  Copy,
+  CornerDownRight,
   Download,
   FileText,
   Hash,
   Loader2,
   Paperclip,
   Pencil,
+  Reply,
+  Search,
   SendHorizontal,
   Smile,
   Trash2,
@@ -25,6 +31,7 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { toast } from 'sonner';
 import type { ConcordApiClient } from '../lib/api.js';
 import {
   formatDateDivider,
@@ -35,15 +42,57 @@ import {
 } from '../lib/format.js';
 import { openExternalUrl } from '../lib/storage.js';
 import { Avatar } from './Avatar.js';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from './ui/ContextMenu.js';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/Popover.js';
 import { ActionTooltip } from './ui/Tooltip.js';
 
 const QUICK_EMOJIS = ['👍', '😂', '🔥', '❤️', '👀'];
-const PICKER_EMOJIS = [
-  '😀', '😂', '🤣', '😍', '🥳', '😎', '🤔', '😭',
-  '😡', '👍', '👎', '👏', '🙏', '🔥', '❤️', '💯',
-  '👀', '🎉', '🎮', '🎧', '💀', '✅', '⚡', '🚀',
+
+const EMOJI_CATEGORIES: Array<{ id: string; label: string; emojis: string[] }> = [
+  {
+    id: 'top',
+    label: 'Populares',
+    emojis: [
+      '😀', '😂', '🤣', '😍', '🥳', '😎', '🤔', '😭',
+      '😡', '🤯', '🥶', '🤡', '👍', '👎', '👏', '🙏',
+      '🔥', '❤️', '💯', '👀', '🎉', '💀', '✅', '🚀',
+    ],
+  },
+  {
+    id: 'faces',
+    label: 'Rostos',
+    emojis: [
+      '😁', '😅', '😉', '😊', '😋', '😜', '🤪', '🤨',
+      '🧐', '😏', '😒', '🙄', '😬', '😮‍💨', '😴', '🤤',
+      '🤮', '🤧', '🥵', '😱', '😨', '😥', '😓', '🤗',
+    ],
+  },
+  {
+    id: 'games',
+    label: 'Jogos & Tech',
+    emojis: [
+      '🎮', '🕹️', '🎧', '🎤', '💻', '🖥️', '⌨️', '🖱️',
+      '🏆', '🥇', '🎯', '⚔️', '🛡️', '💣', '⚡', '🔋',
+      '📡', '🎬', '🎵', '🔊', '📸', '📱', '🕹', '👾',
+    ],
+  },
+  {
+    id: 'symbols',
+    label: 'Gestos & Símbolos',
+    emojis: [
+      '👌', '✌️', '🤞', '🤟', '🤘', '🤙', '💪', '🫡',
+      '🤝', '🫶', '🙌', '🤦', '🤷', '❌', '⚠️', '❓',
+      '❗', '💬', '📌', '⭐', '💎', '👑', '🍻', '☕',
+    ],
+  },
 ];
+
 const GROUP_WINDOW_MS = 5 * 60 * 1000;
 
 interface PendingUpload {
@@ -67,7 +116,11 @@ interface ChatAreaProps {
   showMembers?: boolean;
   onToggleMembers?: () => void;
   onLoadOlder: () => Promise<void>;
-  onSendMessage: (content: string, attachmentIds: string[]) => Promise<void>;
+  onSendMessage: (
+    content: string,
+    attachmentIds: string[],
+    replyToId?: string | null,
+  ) => Promise<void>;
   onEditMessage: (messageId: string, content: string) => Promise<void>;
   onDeleteMessage: (messageId: string) => Promise<void>;
   onToggleReaction: (messageId: string, emoji: string) => Promise<void>;
@@ -98,7 +151,7 @@ function splitUrlTrailingPunctuation(rawUrl: string): { cleanUrl: string; traili
   return { cleanUrl, trailing };
 }
 
-function renderFormattedText(text: string): ReactNode {
+function renderInlineText(text: string, keyPrefix: string): ReactNode {
   const tokenRe =
     /(https?:\/\/[^\s<>"'`]+|`[^`\n]+`|\*\*[^*\n]+?\*\*|~~[^~\n]+?~~|\*[^*\n]+?\*)/g;
   const nodes: ReactNode[] = [];
@@ -108,7 +161,7 @@ function renderFormattedText(text: string): ReactNode {
 
   while ((match = tokenRe.exec(text)) !== null) {
     if (match.index > lastIndex) {
-      nodes.push(<span key={key++}>{text.slice(lastIndex, match.index)}</span>);
+      nodes.push(<span key={`${keyPrefix}-${key++}`}>{text.slice(lastIndex, match.index)}</span>);
     }
 
     const token = match[0]!;
@@ -117,25 +170,25 @@ function renderFormattedText(text: string): ReactNode {
       if (cleanUrl) {
         nodes.push(
           <a
-            key={key++}
+            key={`${keyPrefix}-${key++}`}
             href={cleanUrl}
             onClick={(e) => {
               e.preventDefault();
               openExternalUrl(cleanUrl);
             }}
-            className="text-[#7289da] underline decoration-[#7289da]/40 underline-offset-2 transition hover:text-[#99aab5]"
+            className="text-[#7983f5] underline decoration-[#7983f5]/40 underline-offset-2 transition hover:text-[#a5acf8]"
           >
             {cleanUrl}
           </a>,
         );
       }
       if (trailing) {
-        nodes.push(<span key={key++}>{trailing}</span>);
+        nodes.push(<span key={`${keyPrefix}-${key++}`}>{trailing}</span>);
       }
     } else if (token.startsWith('`') && token.endsWith('`')) {
       nodes.push(
         <code
-          key={key++}
+          key={`${keyPrefix}-${key++}`}
           className="rounded border border-white/[0.08] bg-[#0c0c0e] px-1.5 py-0.5 font-mono text-[12.5px] text-zinc-200"
         >
           {token.slice(1, -1)}
@@ -143,33 +196,105 @@ function renderFormattedText(text: string): ReactNode {
       );
     } else if (token.startsWith('**') && token.endsWith('**')) {
       nodes.push(
-        <strong key={key++} className="font-semibold text-white">
+        <strong key={`${keyPrefix}-${key++}`} className="font-semibold text-white">
           {token.slice(2, -2)}
         </strong>,
       );
     } else if (token.startsWith('~~') && token.endsWith('~~')) {
       nodes.push(
-        <del key={key++} className="text-zinc-500 line-through">
+        <del key={`${keyPrefix}-${key++}`} className="text-zinc-500 line-through">
           {token.slice(2, -2)}
         </del>,
       );
     } else if (token.startsWith('*') && token.endsWith('*')) {
       nodes.push(
-        <em key={key++} className="italic text-zinc-100">
+        <em key={`${keyPrefix}-${key++}`} className="italic text-zinc-100">
           {token.slice(1, -1)}
         </em>,
       );
     } else {
-      nodes.push(<span key={key++}>{token}</span>);
+      nodes.push(<span key={`${keyPrefix}-${key++}`}>{token}</span>);
     }
 
     lastIndex = match.index + token.length;
   }
 
   if (lastIndex < text.length) {
-    nodes.push(<span key={key++}>{text.slice(lastIndex)}</span>);
+    nodes.push(<span key={`${keyPrefix}-${key++}`}>{text.slice(lastIndex)}</span>);
   }
   return nodes;
+}
+
+function CodeBlock({ lang, code }: { lang: string; code: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const handleCopy = () => {
+    void navigator.clipboard.writeText(code).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1800);
+    });
+  };
+
+  return (
+    <div className="my-1.5 overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0c0e]">
+      <div className="flex items-center justify-between border-b border-white/[0.06] bg-[#121216] px-3 py-1 text-[10px] text-zinc-400">
+        <span className="font-mono uppercase">{lang || 'código'}</span>
+        <button
+          type="button"
+          onClick={handleCopy}
+          className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-zinc-300 transition hover:bg-white/[0.07] hover:text-white"
+        >
+          {copied ? (
+            <>
+              <Check className="h-3 w-3 text-emerald-400" />
+              <span>Copiado</span>
+            </>
+          ) : (
+            <>
+              <Copy className="h-3 w-3" />
+              <span>Copiar</span>
+            </>
+          )}
+        </button>
+      </div>
+      <pre className="overflow-x-auto p-3 font-mono text-xs leading-relaxed text-zinc-200">
+        <code>{code}</code>
+      </pre>
+    </div>
+  );
+}
+
+function renderFormattedMessage(text: string): ReactNode {
+  const fenceRe = /```([a-zA-Z0-9_-]*)\n?([\s\S]*?)```/g;
+  const parts: ReactNode[] = [];
+  let lastIndex = 0;
+  let match: RegExpExecArray | null;
+  let idx = 0;
+
+  while ((match = fenceRe.exec(text)) !== null) {
+    if (match.index > lastIndex) {
+      const before = text.slice(lastIndex, match.index);
+      parts.push(
+        <span key={`txt-${idx++}`} className="whitespace-pre-wrap break-words">
+          {renderInlineText(before, `in-${idx}`)}
+        </span>,
+      );
+    }
+    const lang = match[1] ?? '';
+    const code = (match[2] ?? '').replace(/\n$/, '');
+    parts.push(<CodeBlock key={`code-${idx++}`} lang={lang} code={code} />);
+    lastIndex = match.index + match[0].length;
+  }
+
+  if (lastIndex < text.length) {
+    parts.push(
+      <span key={`txt-${idx++}`} className="whitespace-pre-wrap break-words">
+        {renderInlineText(text.slice(lastIndex), `in-${idx}`)}
+      </span>,
+    );
+  }
+
+  return parts;
 }
 
 export function ChatArea({
@@ -192,18 +317,29 @@ export function ChatArea({
 }: ChatAreaProps) {
   const [draft, setDraft] = useState('');
   const [pendingUploads, setPendingUploads] = useState<PendingUpload[]>([]);
+  const [replyingTo, setReplyingTo] = useState<Message | null>(null);
   const [sending, setSending] = useState(false);
   const [composerError, setComposerError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
+  const [showJumpBottom, setShowJumpBottom] = useState(false);
+  const [highlightedMsgId, setHighlightedMsgId] = useState<string | null>(null);
 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editDraft, setEditDraft] = useState('');
   const [lightboxImage, setLightboxImage] = useState<{ url: string; name: string } | null>(null);
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
+  const [emojiCategory, setEmojiCategory] = useState(EMOJI_CATEGORIES[0]!.id);
+
+  // Busca no histórico do canal
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchLoading, setSearchLoading] = useState(false);
+  const [searchResults, setSearchResults] = useState<Message[]>([]);
 
   const scrollContainerRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const composerRef = useRef<HTMLTextAreaElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const pendingUploadsRef = useRef<PendingUpload[]>(pendingUploads);
   const isNearBottomRef = useRef(true);
   const prevChannelIdRef = useRef<string | null>(null);
@@ -217,11 +353,71 @@ export function ChatArea({
 
   useEffect(() => {
     setEditingId(null);
+    setReplyingTo(null);
     setComposerError(null);
     setShowEmojiPicker(false);
+    setSearchOpen(false);
+    setSearchQuery('');
+    setSearchResults([]);
+    setShowJumpBottom(false);
     isNearBottomRef.current = true;
     composerRef.current?.focus();
   }, [channel.id]);
+
+  // Ctrl+F abre busca no canal
+  useEffect(() => {
+    const onKeyDown = (e: globalThis.KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
+        e.preventDefault();
+        setSearchOpen(true);
+        requestAnimationFrame(() => searchInputRef.current?.focus());
+      } else if (e.key === 'Escape') {
+        if (searchOpen) {
+          setSearchOpen(false);
+          setSearchQuery('');
+          setSearchResults([]);
+        } else if (replyingTo) {
+          setReplyingTo(null);
+        }
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [searchOpen, replyingTo]);
+
+  // Debounce da busca no histórico do servidor
+  useEffect(() => {
+    if (!searchOpen) return;
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      setSearchResults([]);
+      setSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSearchLoading(true);
+    const timer = setTimeout(() => {
+      void api
+        .searchMessages(channel.id, trimmed, 30)
+        .then((res) => {
+          if (!cancelled) {
+            setSearchResults(res.messages);
+          }
+        })
+        .catch(() => {
+          if (!cancelled) setSearchResults([]);
+        })
+        .finally(() => {
+          if (!cancelled) setSearchLoading(false);
+        });
+    }, 260);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [api, channel.id, searchOpen, searchQuery]);
 
   useEffect(() => {
     const el = composerRef.current;
@@ -281,6 +477,26 @@ export function ChatArea({
     if (!el) return;
     const distanceFromBottom = el.scrollHeight - el.scrollTop - el.clientHeight;
     isNearBottomRef.current = distanceFromBottom < 120;
+    setShowJumpBottom(distanceFromBottom > 320);
+  }
+
+  function scrollToBottom(): void {
+    const el = scrollContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+  }
+
+  function jumpToMessage(messageId: string): void {
+    const targetEl = document.getElementById(`msg-${messageId}`);
+    if (targetEl) {
+      targetEl.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      setHighlightedMsgId(messageId);
+      setTimeout(() => {
+        setHighlightedMsgId((cur) => (cur === messageId ? null : cur));
+      }, 1800);
+    } else {
+      toast.info('Essa mensagem está mais acima no histórico. Use "Carregar mensagens anteriores".');
+    }
   }
 
   async function handleLoadOlderClick(): Promise<void> {
@@ -425,12 +641,13 @@ export function ChatArea({
     setComposerError(null);
 
     try {
-      await onSendMessage(draft.trim(), readyAttachments);
+      await onSendMessage(draft.trim(), readyAttachments, replyingTo?.id ?? null);
       for (const item of pendingUploads) {
         if (item.previewUrl) URL.revokeObjectURL(item.previewUrl);
       }
       setDraft('');
       setPendingUploads([]);
+      setReplyingTo(null);
       lastTypingPingRef.current = 0;
       onTypingSignal(false);
     } catch (err) {
@@ -445,6 +662,17 @@ export function ChatArea({
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       void submitMessage();
+    } else if (e.key === 'ArrowUp' && draft.length === 0 && !editingId) {
+      const lastOwn = [...messages]
+        .reverse()
+        .find((m) => m.authorId === currentUser.id && m.content.trim().length > 0);
+      if (lastOwn) {
+        e.preventDefault();
+        setEditingId(lastOwn.id);
+        setEditDraft(lastOwn.content);
+      }
+    } else if (e.key === 'Escape' && replyingTo) {
+      setReplyingTo(null);
     }
   }
 
@@ -459,12 +687,21 @@ export function ChatArea({
     }
   }
 
+  function copyMessageText(content: string): void {
+    void navigator.clipboard.writeText(content).then(() => {
+      toast.success('Texto copiado.');
+    });
+  }
+
   const typingText =
     typingUsers.length === 0
       ? null
       : typingUsers.length === 1
         ? `${typingUsers[0]!.displayName} está digitando`
         : `${typingUsers.map((u) => u.displayName).join(', ')} estão digitando`;
+
+  const currentEmojiCat =
+    EMOJI_CATEGORIES.find((c) => c.id === emojiCategory) ?? EMOJI_CATEGORIES[0]!;
 
   return (
     <section
@@ -500,7 +737,32 @@ export function ChatArea({
           </h3>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1.5">
+          <ActionTooltip label="Buscar mensagens neste canal (Ctrl+F)">
+            <button
+              type="button"
+              onClick={() => {
+                setSearchOpen((prev) => {
+                  const next = !prev;
+                  if (next) {
+                    requestAnimationFrame(() => searchInputRef.current?.focus());
+                  } else {
+                    setSearchQuery('');
+                    setSearchResults([]);
+                  }
+                  return next;
+                });
+              }}
+              className={`rounded-lg p-1.5 transition ${
+                searchOpen
+                  ? 'bg-white/[0.1] text-white'
+                  : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200'
+              }`}
+            >
+              <Search className="h-4 w-4" />
+            </button>
+          </ActionTooltip>
+
           {onToggleMembers && (
             <ActionTooltip label={showMembers ? 'Ocultar lista de membros' : 'Mostrar lista de membros'}>
               <button
@@ -519,11 +781,78 @@ export function ChatArea({
         </div>
       </div>
 
+      {/* Barra de Busca no Canal */}
+      {searchOpen && (
+        <div className="shrink-0 border-b border-white/[0.07] bg-[#101013] px-4 py-2.5">
+          <div className="flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-1.5">
+            <Search className="h-3.5 w-3.5 shrink-0 text-zinc-400" />
+            <input
+              ref={searchInputRef}
+              type="text"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              placeholder={`Buscar no histórico de #${channel.name}...`}
+              className="w-full bg-transparent text-xs text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
+            />
+            {searchLoading && <Loader2 className="h-3.5 w-3.5 animate-spin text-zinc-400" />}
+            <button
+              type="button"
+              onClick={() => {
+                setSearchOpen(false);
+                setSearchQuery('');
+                setSearchResults([]);
+              }}
+              className="rounded p-0.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+            >
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+
+          {searchQuery.trim().length > 0 && !searchLoading && (
+            <div className="mt-2 max-h-52 space-y-1 overflow-y-auto">
+              {searchResults.length === 0 ? (
+                <p className="py-2 text-center text-xs text-zinc-500">
+                  Nenhuma mensagem encontrada para "{searchQuery.trim()}".
+                </p>
+              ) : (
+                searchResults.map((res) => (
+                  <button
+                    key={res.id}
+                    type="button"
+                    onClick={() => jumpToMessage(res.id)}
+                    className="flex w-full items-start gap-2.5 rounded-lg border border-white/[0.05] bg-[#16161b] px-3 py-2 text-left transition hover:border-white/[0.12] hover:bg-[#1d1d24]"
+                  >
+                    <Avatar
+                      displayName={res.author.displayName}
+                      color={res.author.avatarColor}
+                      size="xs"
+                    />
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-baseline gap-2">
+                        <span className="text-xs font-semibold text-white">
+                          {res.author.displayName}
+                        </span>
+                        <span className="text-[10px] text-zinc-500">
+                          {formatMessageTimestamp(res.createdAt)}
+                        </span>
+                      </div>
+                      <p className="mt-0.5 line-clamp-2 text-xs text-zinc-300">
+                        {res.content}
+                      </p>
+                    </div>
+                  </button>
+                ))
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Lista de Mensagens */}
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto px-4 py-4 select-text"
+        className="relative flex-1 overflow-y-auto px-4 py-4 select-text"
       >
         {loadingMessages ? (
           <div className="flex h-full items-center justify-center text-zinc-400">
@@ -558,7 +887,7 @@ export function ChatArea({
                   Início de #{channel.name}
                 </h4>
                 <p className="mt-1 text-xs text-zinc-400">
-                  Envie a primeira mensagem ou cole uma imagem com Ctrl+V.
+                  Envie a primeira mensagem, cole uma imagem com Ctrl+V ou use ``` para blocos de código.
                 </p>
               </div>
             )}
@@ -568,6 +897,7 @@ export function ChatArea({
               const isNewDay = !prev || getDayKey(prev.createdAt) !== getDayKey(msg.createdAt);
               const isGrouped =
                 !isNewDay &&
+                !msg.replyTo &&
                 prev !== null &&
                 prev.authorId === msg.authorId &&
                 Date.parse(msg.createdAt) - Date.parse(prev.createdAt) < GROUP_WINDOW_MS;
@@ -575,6 +905,7 @@ export function ChatArea({
               const isAuthor = msg.authorId === currentUser.id;
               const canDelete = isAuthor || currentUser.role === 'admin';
               const isEditing = editingId === msg.id;
+              const isHighlighted = highlightedMsgId === msg.id;
 
               return (
                 <Fragment key={msg.id}>
@@ -588,212 +919,317 @@ export function ChatArea({
                     </div>
                   )}
 
-                  <div
-                    className={`group relative flex gap-3 rounded-lg px-2.5 py-1 transition hover:bg-white/[0.025] ${
-                      isGrouped ? 'mt-0' : 'mt-2.5 pt-1.5'
-                    }`}
-                  >
-                    {/* Ações no Hover */}
-                    {!isEditing && (
-                      <div className="absolute -top-3 right-2 z-10 hidden items-center gap-0.5 rounded-lg border border-white/[0.09] bg-[#18181d] p-0.5 shadow-lg group-hover:flex">
-                        {QUICK_EMOJIS.map((emoji) => (
-                          <button
-                            key={emoji}
-                            type="button"
-                            onClick={() => void onToggleReaction(msg.id, emoji)}
-                            className="rounded px-1.5 py-0.5 text-sm transition hover:bg-white/10"
-                          >
-                            {emoji}
-                          </button>
-                        ))}
-                        {isAuthor && (
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <div
+                        id={`msg-${msg.id}`}
+                        className={`group relative flex flex-col rounded-lg px-2.5 py-1 transition ${
+                          isHighlighted
+                            ? 'bg-[#5865f2]/15 ring-1 ring-[#5865f2]/40'
+                            : 'hover:bg-white/[0.025]'
+                        } ${isGrouped ? 'mt-0' : 'mt-2.5 pt-1.5'}`}
+                      >
+                        {/* Prévia da Mensagem Respondida */}
+                        {msg.replyTo && (
                           <button
                             type="button"
-                            onClick={() => {
-                              setEditingId(msg.id);
-                              setEditDraft(msg.content);
-                            }}
-                            title="Editar"
-                            className="rounded p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                            onClick={() => jumpToMessage(msg.replyTo!.id)}
+                            className="mb-1 ml-12 flex max-w-full items-center gap-1.5 text-left text-[11px] text-zinc-400 transition hover:text-zinc-200"
                           >
-                            <Pencil className="h-3.5 w-3.5" />
+                            <CornerDownRight className="h-3 w-3 shrink-0 text-zinc-500" />
+                            <span
+                              className="shrink-0 font-semibold"
+                              style={{ color: msg.replyTo.authorColor }}
+                            >
+                              {msg.replyTo.authorName}
+                            </span>
+                            <span className="truncate text-zinc-400">
+                              {msg.replyTo.content || (msg.replyTo.hasAttachments ? 'Enviou um anexo' : '')}
+                            </span>
                           </button>
                         )}
-                        {canDelete && (
-                          <button
-                            type="button"
-                            onClick={() => void onDeleteMessage(msg.id)}
-                            title="Excluir"
-                            className="rounded p-1.5 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300"
-                          >
-                            <Trash2 className="h-3.5 w-3.5" />
-                          </button>
-                        )}
-                      </div>
-                    )}
 
-                    {/* Coluna esquerda: Avatar ou Horário agrupado */}
-                    <div className="w-9 shrink-0">
-                      {isGrouped ? (
-                        <span className="hidden pt-1 text-[10px] tabular-nums text-zinc-500 group-hover:inline-block">
-                          {formatShortTime(msg.createdAt)}
-                        </span>
-                      ) : (
-                        <Avatar
-                          displayName={msg.author.displayName}
-                          color={msg.author.avatarColor}
-                          size="md"
-                          ringBg="border-[#141418]"
-                        />
-                      )}
-                    </div>
+                        <div className="flex gap-3">
+                          {/* Ações no Hover */}
+                          {!isEditing && (
+                            <div className="absolute -top-3 right-2 z-10 hidden items-center gap-0.5 rounded-lg border border-white/[0.09] bg-[#18181d] p-0.5 shadow-lg group-hover:flex">
+                              {QUICK_EMOJIS.map((emoji) => (
+                                <button
+                                  key={emoji}
+                                  type="button"
+                                  onClick={() => void onToggleReaction(msg.id, emoji)}
+                                  className="rounded px-1.5 py-0.5 text-sm transition hover:bg-white/10"
+                                >
+                                  {emoji}
+                                </button>
+                              ))}
+                              <ActionTooltip label="Responder">
+                                <button
+                                  type="button"
+                                  onClick={() => {
+                                    setReplyingTo(msg);
+                                    composerRef.current?.focus();
+                                  }}
+                                  className="rounded p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                                >
+                                  <Reply className="h-3.5 w-3.5" />
+                                </button>
+                              </ActionTooltip>
+                              {isAuthor && (
+                                <ActionTooltip label="Editar">
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      setEditingId(msg.id);
+                                      setEditDraft(msg.content);
+                                    }}
+                                    className="rounded p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+                                  >
+                                    <Pencil className="h-3.5 w-3.5" />
+                                  </button>
+                                </ActionTooltip>
+                              )}
+                              {canDelete && (
+                                <ActionTooltip label="Excluir">
+                                  <button
+                                    type="button"
+                                    onClick={() => void onDeleteMessage(msg.id)}
+                                    className="rounded p-1.5 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300"
+                                  >
+                                    <Trash2 className="h-3.5 w-3.5" />
+                                  </button>
+                                </ActionTooltip>
+                              )}
+                            </div>
+                          )}
 
-                    {/* Conteúdo da Mensagem */}
-                    <div className="min-w-0 flex-1">
-                      {!isGrouped && (
-                        <div className="mb-0.5 flex items-baseline gap-2">
-                          <span className="text-sm font-semibold text-white">
-                            {msg.author.displayName}
-                          </span>
-                          <span className="text-[11px] text-zinc-500">
-                            {formatMessageTimestamp(msg.createdAt)}
-                          </span>
-                        </div>
-                      )}
+                          {/* Coluna esquerda: Avatar ou Horário agrupado */}
+                          <div className="w-9 shrink-0">
+                            {isGrouped ? (
+                              <span className="hidden pt-1 text-[10px] tabular-nums text-zinc-500 group-hover:inline-block">
+                                {formatShortTime(msg.createdAt)}
+                              </span>
+                            ) : (
+                              <Avatar
+                                displayName={msg.author.displayName}
+                                color={msg.author.avatarColor}
+                                size="md"
+                                ringBg="border-[#141418]"
+                              />
+                            )}
+                          </div>
 
-                      {isEditing ? (
-                        <div className="mt-1 space-y-1.5">
-                          <textarea
-                            autoFocus
-                            rows={2}
-                            value={editDraft}
-                            onChange={(e) => setEditDraft(e.target.value)}
-                            onKeyDown={(e) => {
-                              if (e.key === 'Enter' && !e.shiftKey) {
-                                e.preventDefault();
-                                void saveEdit(msg.id);
-                              } else if (e.key === 'Escape') {
-                                setEditingId(null);
-                              }
-                            }}
-                            className="w-full resize-none rounded-lg border border-white/[0.18] bg-[#0c0c0e] px-3 py-2 text-sm text-zinc-100 focus:outline-none"
-                          />
-                          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
-                            <span>Enter para salvar • Esc para cancelar</span>
-                            <button
-                              type="button"
-                              onClick={() => void saveEdit(msg.id)}
-                              className="font-semibold text-white hover:underline"
-                            >
-                              Salvar
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setEditingId(null)}
-                              className="text-zinc-400 hover:underline"
-                            >
-                              Cancelar
-                            </button>
+                          {/* Conteúdo da Mensagem */}
+                          <div className="min-w-0 flex-1">
+                            {!isGrouped && (
+                              <div className="mb-0.5 flex items-baseline gap-2">
+                                <span className="text-sm font-semibold text-white">
+                                  {msg.author.displayName}
+                                </span>
+                                <span className="text-[11px] text-zinc-500">
+                                  {formatMessageTimestamp(msg.createdAt)}
+                                </span>
+                              </div>
+                            )}
+
+                            {isEditing ? (
+                              <div className="mt-1 space-y-1.5">
+                                <textarea
+                                  autoFocus
+                                  rows={2}
+                                  value={editDraft}
+                                  onChange={(e) => setEditDraft(e.target.value)}
+                                  onKeyDown={(e) => {
+                                    if (e.key === 'Enter' && !e.shiftKey) {
+                                      e.preventDefault();
+                                      void saveEdit(msg.id);
+                                    } else if (e.key === 'Escape') {
+                                      setEditingId(null);
+                                    }
+                                  }}
+                                  className="w-full resize-none rounded-lg border border-white/[0.18] bg-[#0c0c0e] px-3 py-2 text-sm text-zinc-100 focus:outline-none"
+                                />
+                                <div className="flex items-center gap-2 text-[11px] text-zinc-400">
+                                  <span>Enter para salvar • Esc para cancelar</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => void saveEdit(msg.id)}
+                                    className="font-semibold text-white hover:underline"
+                                  >
+                                    Salvar
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setEditingId(null)}
+                                    className="text-zinc-400 hover:underline"
+                                  >
+                                    Cancelar
+                                  </button>
+                                </div>
+                              </div>
+                            ) : (
+                              msg.content && (
+                                <div className="text-[13.5px] leading-relaxed text-zinc-200">
+                                  {renderFormattedMessage(msg.content)}
+                                  {msg.editedAt && (
+                                    <span className="ml-1.5 text-[10px] text-zinc-500">(editada)</span>
+                                  )}
+                                </div>
+                              )
+                            )}
+
+                            {/* Anexos */}
+                            {msg.attachments.length > 0 && (
+                              <div className="mt-2 flex flex-wrap gap-2">
+                                {msg.attachments.map((att) => {
+                                  const fullUrl = api.resolveAssetUrl(att.url);
+                                  if (att.isImage) {
+                                    return (
+                                      <button
+                                        key={att.id}
+                                        type="button"
+                                        onClick={() =>
+                                          setLightboxImage({ url: fullUrl, name: att.originalName })
+                                        }
+                                        className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0c0e] transition hover:border-white/[0.2]"
+                                      >
+                                        <img
+                                          src={fullUrl}
+                                          alt={att.originalName}
+                                          loading="lazy"
+                                          onLoad={() => {
+                                            const el = scrollContainerRef.current;
+                                            if (el && isNearBottomRef.current) {
+                                              el.scrollTop = el.scrollHeight;
+                                            }
+                                          }}
+                                          className="max-h-72 max-w-sm object-contain"
+                                        />
+                                      </button>
+                                    );
+                                  }
+
+                                  return (
+                                    <button
+                                      key={att.id}
+                                      type="button"
+                                      onClick={() => openExternalUrl(fullUrl)}
+                                      className="flex items-center gap-2.5 rounded-lg border border-white/[0.08] bg-[#1a1a20] px-3 py-2 text-left transition hover:border-white/[0.16] hover:bg-[#202028]"
+                                    >
+                                      <FileText className="h-4 w-4 shrink-0 text-zinc-300" />
+                                      <div className="min-w-0 max-w-[200px]">
+                                        <div className="truncate text-xs font-medium text-zinc-200">
+                                          {att.originalName}
+                                        </div>
+                                        <div className="text-[10px] text-zinc-500">
+                                          {formatFileSize(att.size)}
+                                        </div>
+                                      </div>
+                                      <Download className="h-4 w-4 shrink-0 text-zinc-400" />
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
+
+                            {/* Reações */}
+                            {msg.reactions.length > 0 && (
+                              <div className="mt-1.5 flex flex-wrap gap-1">
+                                {msg.reactions.map((r) => {
+                                  const reactedByMe = r.userIds.includes(currentUser.id);
+                                  return (
+                                    <button
+                                      key={r.emoji}
+                                      type="button"
+                                      onClick={() => void onToggleReaction(msg.id, r.emoji)}
+                                      className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
+                                        reactedByMe
+                                          ? 'border-[#5865f2]/60 bg-[#5865f2]/15 text-zinc-100'
+                                          : 'border-white/[0.08] bg-[#1c1c22] text-zinc-300 hover:bg-[#24242c]'
+                                      }`}
+                                    >
+                                      <span>{r.emoji}</span>
+                                      <span className="font-mono text-[11px] font-medium tabular-nums">
+                                        {r.userIds.length}
+                                      </span>
+                                    </button>
+                                  );
+                                })}
+                              </div>
+                            )}
                           </div>
                         </div>
-                      ) : (
-                        msg.content && (
-                          <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-zinc-200">
-                            {renderFormattedText(msg.content)}
-                            {msg.editedAt && (
-                              <span className="ml-1.5 text-[10px] text-zinc-500">(editada)</span>
-                            )}
-                          </p>
-                        )
-                      )}
+                      </div>
+                    </ContextMenuTrigger>
 
-                      {/* Anexos */}
-                      {msg.attachments.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-2">
-                          {msg.attachments.map((att) => {
-                            const fullUrl = api.resolveAssetUrl(att.url);
-                            if (att.isImage) {
-                              return (
-                                <button
-                                  key={att.id}
-                                  type="button"
-                                  onClick={() =>
-                                    setLightboxImage({ url: fullUrl, name: att.originalName })
-                                  }
-                                  className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0c0e] transition hover:border-white/[0.2]"
-                                >
-                                  <img
-                                    src={fullUrl}
-                                    alt={att.originalName}
-                                    loading="lazy"
-                                    onLoad={() => {
-                                      const el = scrollContainerRef.current;
-                                      if (el && isNearBottomRef.current) {
-                                        el.scrollTop = el.scrollHeight;
-                                      }
-                                    }}
-                                    className="max-h-72 max-w-sm object-contain"
-                                  />
-                                </button>
-                              );
-                            }
-
-                            return (
-                              <button
-                                key={att.id}
-                                type="button"
-                                onClick={() => openExternalUrl(fullUrl)}
-                                className="flex items-center gap-2.5 rounded-lg border border-white/[0.08] bg-[#1a1a20] px-3 py-2 text-left transition hover:border-white/[0.16] hover:bg-[#202028]"
-                              >
-                                <FileText className="h-4 w-4 shrink-0 text-zinc-300" />
-                                <div className="min-w-0 max-w-[200px]">
-                                  <div className="truncate text-xs font-medium text-zinc-200">
-                                    {att.originalName}
-                                  </div>
-                                  <div className="text-[10px] text-zinc-500">
-                                    {formatFileSize(att.size)}
-                                  </div>
-                                </div>
-                                <Download className="h-4 w-4 shrink-0 text-zinc-400" />
-                              </button>
-                            );
-                          })}
-                        </div>
+                    <ContextMenuContent>
+                      <ContextMenuItem
+                        onSelect={() => {
+                          setReplyingTo(msg);
+                          composerRef.current?.focus();
+                        }}
+                      >
+                        <Reply className="h-3.5 w-3.5 text-zinc-400" />
+                        Responder
+                      </ContextMenuItem>
+                      {msg.content && (
+                        <ContextMenuItem onSelect={() => copyMessageText(msg.content)}>
+                          <Copy className="h-3.5 w-3.5 text-zinc-400" />
+                          Copiar Texto
+                        </ContextMenuItem>
                       )}
-
-                      {/* Reações */}
-                      {msg.reactions.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1">
-                          {msg.reactions.map((r) => {
-                            const reactedByMe = r.userIds.includes(currentUser.id);
-                            return (
-                              <button
-                                key={r.emoji}
-                                type="button"
-                                onClick={() => void onToggleReaction(msg.id, r.emoji)}
-                                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
-                                  reactedByMe
-                                    ? 'border-[#5865f2]/60 bg-[#5865f2]/15 text-zinc-100'
-                                    : 'border-white/[0.08] bg-[#1c1c22] text-zinc-300 hover:bg-[#24242c]'
-                                }`}
-                              >
-                                <span>{r.emoji}</span>
-                                <span className="font-mono text-[11px] font-medium tabular-nums">
-                                  {r.userIds.length}
-                                </span>
-                              </button>
-                            );
-                          })}
-                        </div>
+                      <ContextMenuSeparator />
+                      <div className="grid grid-cols-5 gap-0.5 px-1 py-1">
+                        {QUICK_EMOJIS.map((emoji) => (
+                          <ContextMenuItem
+                            key={emoji}
+                            onSelect={() => void onToggleReaction(msg.id, emoji)}
+                            className="justify-center px-1 py-1 text-sm"
+                          >
+                            {emoji}
+                          </ContextMenuItem>
+                        ))}
+                      </div>
+                      {(isAuthor || canDelete) && <ContextMenuSeparator />}
+                      {isAuthor && (
+                        <ContextMenuItem
+                          onSelect={() => {
+                            setEditingId(msg.id);
+                            setEditDraft(msg.content);
+                          }}
+                        >
+                          <Pencil className="h-3.5 w-3.5 text-zinc-400" />
+                          Editar Mensagem
+                        </ContextMenuItem>
                       )}
-                    </div>
-                  </div>
+                      {canDelete && (
+                        <ContextMenuItem danger onSelect={() => void onDeleteMessage(msg.id)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Excluir Mensagem
+                        </ContextMenuItem>
+                      )}
+                    </ContextMenuContent>
+                  </ContextMenu>
                 </Fragment>
               );
             })}
           </div>
         )}
       </div>
+
+      {/* Botão flutuante para descer ao final do chat */}
+      {showJumpBottom && (
+        <div className="pointer-events-none absolute bottom-24 right-6 z-20">
+          <button
+            type="button"
+            onClick={scrollToBottom}
+            className="concord-panel pointer-events-auto inline-flex items-center gap-1.5 rounded-full border border-white/[0.12] bg-[#18181d] px-3 py-1.5 text-xs font-medium text-zinc-200 transition hover:bg-[#24242c] hover:text-white"
+          >
+            <ArrowDown className="h-3.5 w-3.5" />
+            <span>Voltar ao final</span>
+          </button>
+        </div>
+      )}
 
       {/* Indicador de Digitando */}
       <div className="flex h-5 shrink-0 items-center px-4 text-[11px] text-zinc-400">
@@ -815,6 +1251,33 @@ export function ChatArea({
           <div className="mb-2 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200">
             <span>{composerError}</span>
             <button type="button" onClick={() => setComposerError(null)}>
+              <X className="h-3.5 w-3.5" />
+            </button>
+          </div>
+        )}
+
+        {/* Banner de Resposta Ativa */}
+        {replyingTo && (
+          <div className="mb-1.5 flex items-center justify-between gap-2 rounded-lg border border-white/[0.08] bg-[#18181d] px-3 py-1.5 text-xs">
+            <div className="flex min-w-0 items-center gap-2">
+              <Reply className="h-3.5 w-3.5 shrink-0 text-[#7983f5]" />
+              <span className="shrink-0 text-zinc-400">Respondendo a</span>
+              <span
+                className="shrink-0 font-semibold"
+                style={{ color: replyingTo.author.avatarColor }}
+              >
+                {replyingTo.author.displayName}
+              </span>
+              <span className="truncate text-zinc-400">
+                {replyingTo.content || 'Enviou um anexo'}
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setReplyingTo(null)}
+              title="Cancelar resposta (Esc)"
+              className="rounded p-0.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
+            >
               <X className="h-3.5 w-3.5" />
             </button>
           </div>
@@ -895,7 +1358,11 @@ export function ChatArea({
               lastTypingPingRef.current = 0;
               onTypingSignal(false);
             }}
-            placeholder={`Mensagem em #${channel.name}`}
+            placeholder={
+              replyingTo
+                ? `Responder a ${replyingTo.author.displayName}...`
+                : `Mensagem em #${channel.name}`
+            }
             className="max-h-36 min-h-[24px] flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
           />
 
@@ -913,17 +1380,35 @@ export function ChatArea({
                 <Smile className="h-4 w-4" />
               </button>
             </PopoverTrigger>
-            <PopoverContent side="top" align="end" className="grid w-64 grid-cols-8 gap-1 p-2">
-              {PICKER_EMOJIS.map((emoji) => (
-                <button
-                  key={emoji}
-                  type="button"
-                  onClick={() => insertEmojiAtCursor(emoji)}
-                  className="flex h-7 w-7 items-center justify-center rounded-md text-base transition hover:bg-white/10"
-                >
-                  {emoji}
-                </button>
-              ))}
+            <PopoverContent side="top" align="end" className="w-72 space-y-2 p-2.5">
+              <div className="flex gap-1 rounded-lg border border-white/[0.07] bg-[#0c0c0e] p-0.5">
+                {EMOJI_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => setEmojiCategory(cat.id)}
+                    className={`flex-1 rounded-md px-1.5 py-1 text-[10px] font-medium transition ${
+                      emojiCategory === cat.id
+                        ? 'bg-[#24242c] text-white'
+                        : 'text-zinc-400 hover:text-zinc-200'
+                    }`}
+                  >
+                    {cat.label.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+              <div className="grid grid-cols-8 gap-1">
+                {currentEmojiCat.emojis.map((emoji) => (
+                  <button
+                    key={emoji}
+                    type="button"
+                    onClick={() => insertEmojiAtCursor(emoji)}
+                    className="flex h-7 w-7 items-center justify-center rounded-md text-base transition hover:bg-white/10"
+                  >
+                    {emoji}
+                  </button>
+                ))}
+              </div>
             </PopoverContent>
           </Popover>
 
@@ -982,7 +1467,7 @@ export function ChatArea({
             src={lightboxImage.url}
             alt={lightboxImage.name}
             onClick={(e) => e.stopPropagation()}
-            className="animate-modal-in max-h-[82vh] max-w-full rounded-lg border border-white/10 object-contain shadow-2xl"
+            className="animate-dialog-in max-h-[82vh] max-w-full rounded-lg border border-white/10 object-contain shadow-2xl"
           />
         </div>
       )}

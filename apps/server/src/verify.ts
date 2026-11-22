@@ -564,6 +564,81 @@ async function run(): Promise<void> {
     assert.equal(r1.status, 200);
     assert.equal(r2.status, 200);
 
+    // 21. CORS preflight deve liberar DELETE e PATCH para o app desktop (concord://app)
+    const corsDeleteRes = await fetch(`${baseUrl}/api/channels/test`, {
+      method: 'OPTIONS',
+      headers: {
+        Origin: 'concord://app',
+        'Access-Control-Request-Method': 'DELETE',
+        'Access-Control-Request-Headers': 'authorization',
+      },
+    });
+    assert.equal(corsDeleteRes.status, 204);
+    const allowedMethods = (corsDeleteRes.headers.get('access-control-allow-methods') ?? '').toUpperCase();
+    assert.ok(allowedMethods.includes('DELETE'), `CORS deve permitir DELETE, recebido: ${allowedMethods}`);
+    assert.ok(allowedMethods.includes('PATCH'), `CORS deve permitir PATCH, recebido: ${allowedMethods}`);
+
+    // 22. Respostas (replyToId) e busca no histórico do canal
+    const replyEv = waitForEvent(sock2, 'message:new', (m) => m.replyToId === targetMsgId);
+    const replyRes = await apiJson<{ message: Message }>(
+      baseUrl,
+      `/api/channels/${textChannel.id}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content: 'Respondendo m1 com busca-especial', replyToId: targetMsgId }),
+      },
+      friend1Token,
+    );
+    assert.equal(replyRes.status, 201);
+    assert.equal(replyRes.data.message.replyTo?.id, targetMsgId);
+    assert.equal(replyRes.data.message.replyTo?.content, 'm1');
+    const [replyMsg] = await replyEv;
+    assert.equal(replyMsg.replyTo?.authorName, 'Luiz Atualizado');
+
+    const searchRes = await apiJson<{ messages: Message[] }>(
+      baseUrl,
+      `/api/channels/${textChannel.id}/messages/search?q=busca-especial`,
+      {},
+      adminToken,
+    );
+    assert.equal(searchRes.status, 200);
+    assert.equal(searchRes.data.messages.length, 1);
+    assert.equal(searchRes.data.messages[0]!.id, replyRes.data.message.id);
+
+    // 23. Exclusao de canal contendo mensagens com respostas em cascata (FK ON DELETE CASCADE + SET NULL)
+    const tempChRes = await apiJson<{ channel: Channel }>(
+      baseUrl,
+      '/api/channels',
+      { method: 'POST', body: JSON.stringify({ name: 'canal-temporario', type: 'text' }) },
+      adminToken,
+    );
+    assert.equal(tempChRes.status, 201);
+    const tempChId = tempChRes.data.channel.id;
+    const parentMsg = await apiJson<{ message: Message }>(
+      baseUrl,
+      `/api/channels/${tempChId}/messages`,
+      { method: 'POST', body: JSON.stringify({ content: 'mensagem pai' }) },
+      adminToken,
+    );
+    assert.equal(parentMsg.status, 201);
+    const childReply = await apiJson<{ message: Message }>(
+      baseUrl,
+      `/api/channels/${tempChId}/messages`,
+      {
+        method: 'POST',
+        body: JSON.stringify({ content: 'resposta filha', replyToId: parentMsg.data.message.id }),
+      },
+      friend1Token,
+    );
+    assert.equal(childReply.status, 201);
+    const delTempCh = await apiJson<{ ok: boolean }>(
+      baseUrl,
+      `/api/channels/${tempChId}`,
+      { method: 'DELETE' },
+      adminToken,
+    );
+    assert.equal(delTempCh.status, 200);
+
     console.log('✅ Todos os testes de integração do Concord Server passaram com sucesso!');
   } finally {
     for (const sock of sockets) {

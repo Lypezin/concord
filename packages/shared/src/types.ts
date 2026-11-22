@@ -34,6 +34,15 @@ export interface ReactionSummary {
   userIds: string[];
 }
 
+export interface MessageReplySummary {
+  id: string;
+  authorId: string;
+  authorName: string;
+  authorColor: string;
+  content: string;
+  hasAttachments: boolean;
+}
+
 export interface Message {
   id: string;
   channelId: string;
@@ -42,6 +51,8 @@ export interface Message {
   content: string;
   attachments: Attachment[];
   reactions: ReactionSummary[];
+  replyToId?: string | null;
+  replyTo?: MessageReplySummary | null;
   editedAt: string | null;
   createdAt: string;
 }

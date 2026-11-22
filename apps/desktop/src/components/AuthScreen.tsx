@@ -18,6 +18,7 @@ import {
 import type { TailscaleProgress, TailscaleStatus } from '../bridge-types.js';
 import { ApiError, createApiClient, normalizeServerUrl } from '../lib/api.js';
 import { loadLastServerUrl, saveLastServerUrl } from '../lib/storage.js';
+import { Tabs, TabsList, TabsTrigger } from './ui/Tabs.js';
 
 interface AuthScreenProps {
   initialServerUrl?: string;
@@ -354,36 +355,18 @@ export function AuthScreen({ initialServerUrl, onAuthenticated }: AuthScreenProp
                 </p>
               </div>
             ) : (
-              <div className="grid grid-cols-2 gap-1 rounded-lg border border-white/[0.07] bg-[#0c0c0e] p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTab('login');
-                    setFormError(null);
-                  }}
-                  className={`rounded-md py-1.5 text-xs font-semibold transition ${
-                    tab === 'login'
-                      ? 'border border-white/[0.08] bg-[#24242c] text-white'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Entrar
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setTab('register');
-                    setFormError(null);
-                  }}
-                  className={`rounded-md py-1.5 text-xs font-semibold transition ${
-                    tab === 'register'
-                      ? 'border border-white/[0.08] bg-[#24242c] text-white'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  Criar Conta
-                </button>
-              </div>
+              <Tabs
+                value={tab}
+                onValueChange={(val) => {
+                  setTab(val as 'login' | 'register');
+                  setFormError(null);
+                }}
+              >
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="login">Entrar</TabsTrigger>
+                  <TabsTrigger value="register">Criar Conta</TabsTrigger>
+                </TabsList>
+              </Tabs>
             )}
 
             {!status.needsAdminSetup && tab === 'register' && (

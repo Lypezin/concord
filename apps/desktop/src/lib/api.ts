@@ -216,9 +216,19 @@ export function createApiClient(baseUrl: string, token?: string) {
       );
     },
 
+    searchMessages(channelId: string, query: string, limit = 30): Promise<{ messages: Message[] }> {
+      const params = new URLSearchParams({ q: query, limit: String(limit) });
+      return requestJson<{ messages: Message[] }>(
+        cleanUrl,
+        `/api/channels/${encodeURIComponent(channelId)}/messages/search?${params.toString()}`,
+        {},
+        token,
+      );
+    },
+
     sendMessage(
       channelId: string,
-      body: { content: string; attachmentIds?: string[] },
+      body: { content: string; attachmentIds?: string[]; replyToId?: string | null },
     ): Promise<{ message: Message }> {
       return requestJson<{ message: Message }>(
         cleanUrl,

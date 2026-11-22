@@ -1,12 +1,16 @@
 import { useEffect, useState } from 'react';
 import type { Channel } from '@concord/shared';
-import { MonitorOff, MonitorUp, PhoneOff, Radio, Tv } from 'lucide-react';
-import type { VoiceConnectionState } from '../hooks/useVoiceRoom.js';
+import { MonitorOff, MonitorUp, PhoneOff, Radio, ShieldCheck, Signal, Tv } from 'lucide-react';
+import type { VoiceConnectionState, VoiceTelemetry } from '../hooks/useVoiceRoom.js';
+import { Popover, PopoverContent, PopoverTrigger } from './ui/Popover.js';
+import { ActionTooltip } from './ui/Tooltip.js';
 
 interface VoiceDockProps {
   channel: Channel;
   voiceState: VoiceConnectionState;
   connectedAt: number | null;
+  telemetry: VoiceTelemetry;
+  rnnoiseEnabled: boolean;
   screenSharing: boolean;
   viewingStage: boolean;
   totalUnreadCount: number;
@@ -32,6 +36,8 @@ export function VoiceDock({
   channel,
   voiceState,
   connectedAt,
+  telemetry,
+  rnnoiseEnabled,
   screenSharing,
   viewingStage,
   totalUnreadCount,
@@ -57,25 +63,84 @@ export function VoiceDock({
         : 'Conectando...';
 
   const isConnected = voiceState === 'connected';
+  const qualityColor =
+    telemetry.quality === 'poor'
+      ? 'text-rose-400'
+      : telemetry.quality === 'good'
+        ? 'text-amber-400'
+        : 'text-emerald-400';
+
+  const qualityLabel =
+    telemetry.quality === 'excellent'
+      ? 'Excelente'
+      : telemetry.quality === 'good'
+        ? 'Boa'
+        : telemetry.quality === 'poor'
+          ? 'Instável'
+          : 'Medindo...';
 
   return (
     <div className="border-t border-white/[0.07] bg-[#101013] px-3 py-2.5">
       <div className="mb-2 flex items-center justify-between gap-2">
-        <button
-          type="button"
-          onClick={onToggleStage}
-          className="group min-w-0 flex-1 text-left"
-          title="Alternar visualização da chamada"
-        >
+        <div className="min-w-0 flex-1">
           <div className="flex items-center justify-between gap-1.5 text-[11px] font-semibold">
-            <span
-              className={`flex min-w-0 items-center gap-1.5 ${
-                isConnected ? 'text-emerald-400' : 'text-amber-400'
-              }`}
-            >
-              <Radio className="h-3.5 w-3.5 shrink-0" />
-              <span className="truncate">{statusLabel}</span>
-            </span>
+            <Popover>
+              <PopoverTrigger asChild>
+                <button
+                  type="button"
+                  title="Ver detalhes e ping da conexão de voz"
+                  className={`flex min-w-0 items-center gap-1.5 rounded px-1 -ml-1 py-0.5 transition hover:bg-white/[0.05] ${
+                    isConnected ? qualityColor : 'text-amber-400'
+                  }`}
+                >
+                  {isConnected ? (
+                    <Signal className="h-3.5 w-3.5 shrink-0" />
+                  ) : (
+                    <Radio className="h-3.5 w-3.5 shrink-0" />
+                  )}
+                  <span className="truncate">{statusLabel}</span>
+                  {isConnected && telemetry.rttMs !== null && (
+                    <span className="shrink-0 font-mono text-[10px] opacity-80">
+                      {telemetry.rttMs}ms
+                    </span>
+                  )}
+                </button>
+              </PopoverTrigger>
+              <PopoverContent side="top" align="start" className="w-60 space-y-2.5">
+                <div className="flex items-center justify-between border-b border-white/[0.07] pb-2">
+                  <span className="text-xs font-semibold text-white">Detalhes da Chamada</span>
+                  <span className={`text-[11px] font-semibold ${qualityColor}`}>
+                    {qualityLabel}
+                  </span>
+                </div>
+                <div className="space-y-1.5 text-[11px]">
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400">Latência (Ping)</span>
+                    <span className="font-mono font-medium text-zinc-100">
+                      {telemetry.rttMs !== null ? `${telemetry.rttMs} ms` : '—'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400">Áudio</span>
+                    <span className="font-mono text-zinc-200">Opus • 48 kHz</span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400">Supressão de ruído</span>
+                    <span className="text-zinc-200">
+                      {rnnoiseEnabled ? 'RNNoise ativo' : 'Nativo'}
+                    </span>
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-zinc-400">Transmissão</span>
+                    <span className="font-mono text-zinc-200">H.264 • até 60 FPS</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-1.5 border-t border-white/[0.07] pt-2 text-[10px] text-emerald-400">
+                  <ShieldCheck className="h-3.5 w-3.5 shrink-0" />
+                  <span>Voz criptografada (DTLS-SRTP)</span>
+                </div>
+              </PopoverContent>
+            </Popover>
 
             {connectedAt && isConnected && (
               <span className="shrink-0 font-mono text-[10px] font-medium tabular-nums text-zinc-400">
@@ -84,19 +149,24 @@ export function VoiceDock({
             )}
           </div>
 
-          <div className="mt-0.5 truncate text-xs font-medium text-zinc-300 transition group-hover:text-white">
+          <button
+            type="button"
+            onClick={onToggleStage}
+            className="mt-0.5 block w-full truncate text-left text-xs font-medium text-zinc-300 transition hover:text-white"
+          >
             {channel.name}
-          </div>
-        </button>
+          </button>
+        </div>
 
-        <button
-          type="button"
-          onClick={onDisconnect}
-          title="Desconectar"
-          className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-rose-500/15 hover:text-rose-300"
-        >
-          <PhoneOff className="h-4 w-4" />
-        </button>
+        <ActionTooltip label="Desconectar da chamada">
+          <button
+            type="button"
+            onClick={onDisconnect}
+            className="shrink-0 rounded-lg p-1.5 text-zinc-400 transition hover:bg-rose-500/15 hover:text-rose-300"
+          >
+            <PhoneOff className="h-4 w-4" />
+          </button>
+        </ActionTooltip>
       </div>
 
       <div className="grid grid-cols-2 gap-1.5">

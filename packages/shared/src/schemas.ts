@@ -57,6 +57,7 @@ export const createMessageSchema = z
   .object({
     content: z.string().max(4000, 'Mensagem pode ter no máximo 4000 caracteres').default(''),
     attachmentIds: z.array(z.string().min(1)).max(5, 'Máximo de 5 anexos por mensagem').optional(),
+    replyToId: z.string().min(1).nullable().optional(),
   })
   .refine(
     (data) => data.content.trim().length > 0 || (data.attachmentIds !== undefined && data.attachmentIds.length > 0),

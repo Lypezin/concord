@@ -2,6 +2,8 @@ import type { Channel, ChannelType, UserPublic, VoiceUserState } from '@concord/
 import {
   Bell,
   BellOff,
+  ChevronDown,
+  Copy,
   Hash,
   HeadphoneOff,
   Headphones,
@@ -10,14 +12,30 @@ import {
   MicOff,
   Pencil,
   Plus,
+  Search,
   Settings,
   Trash2,
   UserPlus,
   Volume2,
 } from 'lucide-react';
-import type { VoiceConnectionState } from '../hooks/useVoiceRoom.js';
+import type { VoiceConnectionState, VoiceTelemetry } from '../hooks/useVoiceRoom.js';
 import { Avatar } from './Avatar.js';
 import { VoiceDock } from './VoiceDock.js';
+import {
+  ContextMenu,
+  ContextMenuContent,
+  ContextMenuItem,
+  ContextMenuLabel,
+  ContextMenuSeparator,
+  ContextMenuTrigger,
+} from './ui/ContextMenu.js';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from './ui/DropdownMenu.js';
 import { Popover, PopoverContent, PopoverTrigger } from './ui/Popover.js';
 import { VolumeSlider } from './ui/Slider.js';
 import { ActionTooltip } from './ui/Tooltip.js';
@@ -36,6 +54,8 @@ interface SidebarProps {
   connectedVoiceChannelId: string | null;
   voiceConnectionState: VoiceConnectionState;
   connectedAt: number | null;
+  voiceTelemetry: VoiceTelemetry;
+  rnnoiseEnabled: boolean;
   totalUnreadCount: number;
   voiceParticipants: Record<string, string[]>;
   voiceStates: Record<string, VoiceUserState>;
@@ -51,6 +71,7 @@ interface SidebarProps {
   onOpenRenameChannel: (channel: Channel) => void;
   onDeleteChannel: (channel: Channel) => void;
   onOpenInvites: () => void;
+  onOpenCommandPalette: () => void;
   onToggleMuteNotifications: () => void;
   onLogout: () => void;
 
@@ -63,6 +84,7 @@ interface SidebarProps {
   onDisconnectVoice: () => void;
   onWatchScreenShare: (participantId: string) => void;
   onSetUserVolume: (userId: string, volume: number) => void;
+  onCopyText?: (text: string, label: string) => void;
 }
 
 export function Sidebar({
@@ -78,6 +100,8 @@ export function Sidebar({
   connectedVoiceChannelId,
   voiceConnectionState,
   connectedAt,
+  voiceTelemetry,
+  rnnoiseEnabled,
   totalUnreadCount,
   voiceParticipants,
   voiceStates,
@@ -92,6 +116,7 @@ export function Sidebar({
   onOpenRenameChannel,
   onDeleteChannel,
   onOpenInvites,
+  onOpenCommandPalette,
   onToggleMuteNotifications,
   onLogout,
   onToggleMute,
@@ -103,6 +128,7 @@ export function Sidebar({
   onDisconnectVoice,
   onWatchScreenShare,
   onSetUserVolume,
+  onCopyText,
 }: SidebarProps) {
   const textChannels = channels.filter((c) => c.type === 'text');
   const voiceChannels = channels.filter((c) => c.type === 'voice');
@@ -113,29 +139,86 @@ export function Sidebar({
 
   return (
     <aside className="flex w-60 shrink-0 flex-col border-r border-white/[0.07] bg-[#0c0c0e]">
-      {/* Cabeçalho do Servidor */}
-      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.07] px-3.5">
-        <div className="min-w-0">
-          <h2 className="truncate text-sm font-semibold tracking-tight text-white">
-            {serverName}
-          </h2>
-          <p className="text-[11px] text-zinc-500">
-            {userCount}/{maxUsers} membros
-          </p>
-        </div>
+      {/* Cabeçalho do Servidor com Menu Dropdown */}
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <button
+            type="button"
+            className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.07] px-3.5 text-left transition hover:bg-white/[0.03] focus:outline-none"
+          >
+            <div className="min-w-0">
+              <h2 className="truncate text-sm font-semibold tracking-tight text-white">
+                {serverName}
+              </h2>
+              <p className="text-[11px] text-zinc-500">
+                {userCount}/{maxUsers} membros
+              </p>
+            </div>
+            <ChevronDown className="h-4 w-4 shrink-0 text-zinc-400" />
+          </button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent align="start" className="w-56">
+          {currentUser.role === 'admin' && (
+            <>
+              <DropdownMenuItem onSelect={onOpenInvites}>
+                <span className="flex items-center gap-2 text-[#7983f5]">
+                  <UserPlus className="h-3.5 w-3.5" />
+                  Convidar Amigos
+                </span>
+              </DropdownMenuItem>
+              <DropdownMenuSeparator />
+            </>
+          )}
+          <DropdownMenuItem onSelect={() => onOpenCreateChannel('text')}>
+            <span className="flex items-center gap-2">
+              <Hash className="h-3.5 w-3.5 text-zinc-400" />
+              Criar Canal de Texto
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={() => onOpenCreateChannel('voice')}>
+            <span className="flex items-center gap-2">
+              <Volume2 className="h-3.5 w-3.5 text-zinc-400" />
+              Criar Canal de Voz
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem onSelect={onOpenCommandPalette}>
+            <span className="flex items-center gap-2">
+              <Search className="h-3.5 w-3.5 text-zinc-400" />
+              Busca Rápida
+            </span>
+            <kbd className="font-mono text-[10px] text-zinc-500">Ctrl+K</kbd>
+          </DropdownMenuItem>
+          <DropdownMenuSeparator />
+          <DropdownMenuItem onSelect={onOpenVoiceSettings}>
+            <span className="flex items-center gap-2">
+              <Settings className="h-3.5 w-3.5 text-zinc-400" />
+              Configurações
+            </span>
+          </DropdownMenuItem>
+          <DropdownMenuItem danger onSelect={onLogout}>
+            <span className="flex items-center gap-2">
+              <LogOut className="h-3.5 w-3.5" />
+              Sair da Conta
+            </span>
+          </DropdownMenuItem>
+        </DropdownMenuContent>
+      </DropdownMenu>
 
-        {currentUser.role === 'admin' && (
-          <ActionTooltip label="Gerenciar convites do servidor" side="bottom">
-            <button
-              type="button"
-              onClick={onOpenInvites}
-              className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#18181d] px-2.5 py-1 text-[11px] font-medium text-zinc-200 transition hover:bg-[#222229] hover:text-white"
-            >
-              <UserPlus className="h-3.5 w-3.5 text-zinc-400" />
-              Convites
-            </button>
-          </ActionTooltip>
-        )}
+      {/* Botão de Acesso Rápido */}
+      <div className="px-2.5 pt-2.5">
+        <button
+          type="button"
+          onClick={onOpenCommandPalette}
+          className="flex w-full items-center justify-between rounded-lg border border-white/[0.07] bg-[#141418] px-2.5 py-1.5 text-xs text-zinc-400 transition hover:border-white/[0.14] hover:text-zinc-200"
+        >
+          <span className="flex items-center gap-1.5">
+            <Search className="h-3.5 w-3.5 text-zinc-500" />
+            <span>Ir para canal...</span>
+          </span>
+          <kbd className="rounded border border-white/[0.08] bg-[#0c0c0e] px-1 font-mono text-[9px] text-zinc-500">
+            Ctrl+K
+          </kbd>
+        </button>
       </div>
 
       {/* Lista de Canais */}
@@ -164,63 +247,92 @@ export function Sidebar({
               const canDelete = textChannels.length > 1;
 
               return (
-                <div
-                  key={ch.id}
-                  className={`group flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] transition ${
-                    isActive
-                      ? 'bg-[#202027] text-white'
-                      : unread > 0
-                        ? 'text-zinc-100 hover:bg-white/[0.04]'
-                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
-                  }`}
-                >
-                  <button
-                    type="button"
-                    onClick={() => onSelectChannel(ch)}
-                    className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                  >
-                    <Hash
-                      className={`h-4 w-4 shrink-0 ${
-                        isActive ? 'text-zinc-200' : 'text-zinc-500'
-                      }`}
-                    />
-                    <span
-                      className={`truncate ${
-                        isActive || unread > 0 ? 'font-semibold' : 'font-medium'
+                <ContextMenu key={ch.id}>
+                  <ContextMenuTrigger asChild>
+                    <div
+                      className={`group flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] transition ${
+                        isActive
+                          ? 'bg-[#202027] text-white'
+                          : unread > 0
+                            ? 'text-zinc-100 hover:bg-white/[0.04]'
+                            : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
                       }`}
                     >
-                      {ch.name}
-                    </span>
-                  </button>
-
-                  <div className="flex items-center gap-0.5">
-                    {unread > 0 && !isActive && (
-                      <span className="rounded-full bg-[#5865f2] px-1.5 py-0.2 text-[10px] font-bold text-white">
-                        {unread > 99 ? '99+' : unread}
-                      </span>
-                    )}
-                    <ActionTooltip label="Renomear canal">
                       <button
                         type="button"
-                        onClick={() => onOpenRenameChannel(ch)}
-                        className="hidden rounded p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white group-hover:inline-flex"
+                        onClick={() => onSelectChannel(ch)}
+                        className="flex min-w-0 flex-1 items-center gap-2 text-left"
                       >
-                        <Pencil className="h-3 w-3" />
-                      </button>
-                    </ActionTooltip>
-                    {canDelete && (
-                      <ActionTooltip label="Excluir canal">
-                        <button
-                          type="button"
-                          onClick={() => onDeleteChannel(ch)}
-                          className="hidden rounded p-1 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
+                        <Hash
+                          className={`h-4 w-4 shrink-0 ${
+                            isActive ? 'text-zinc-200' : 'text-zinc-500'
+                          }`}
+                        />
+                        <span
+                          className={`truncate ${
+                            isActive || unread > 0 ? 'font-semibold' : 'font-medium'
+                          }`}
                         >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </ActionTooltip>
+                          {ch.name}
+                        </span>
+                      </button>
+
+                      <div className="flex items-center gap-0.5">
+                        {unread > 0 && !isActive && (
+                          <span className="rounded-full bg-[#5865f2] px-1.5 py-0.2 text-[10px] font-bold text-white">
+                            {unread > 99 ? '99+' : unread}
+                          </span>
+                        )}
+                        <ActionTooltip label="Renomear canal">
+                          <button
+                            type="button"
+                            onClick={() => onOpenRenameChannel(ch)}
+                            className="hidden rounded p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white group-hover:inline-flex"
+                          >
+                            <Pencil className="h-3 w-3" />
+                          </button>
+                        </ActionTooltip>
+                        {canDelete && (
+                          <ActionTooltip label="Excluir canal">
+                            <button
+                              type="button"
+                              onClick={() => onDeleteChannel(ch)}
+                              className="hidden rounded p-1 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </ActionTooltip>
+                        )}
+                      </div>
+                    </div>
+                  </ContextMenuTrigger>
+                  <ContextMenuContent>
+                    <ContextMenuLabel>#{ch.name}</ContextMenuLabel>
+                    <ContextMenuItem onSelect={() => onSelectChannel(ch)}>
+                      <Hash className="h-3.5 w-3.5 text-zinc-400" />
+                      Abrir Canal
+                    </ContextMenuItem>
+                    <ContextMenuItem onSelect={() => onOpenRenameChannel(ch)}>
+                      <Pencil className="h-3.5 w-3.5 text-zinc-400" />
+                      Renomear Canal
+                    </ContextMenuItem>
+                    {onCopyText && (
+                      <ContextMenuItem onSelect={() => onCopyText(`#${ch.name}`, 'Nome do canal')}>
+                        <Copy className="h-3.5 w-3.5 text-zinc-400" />
+                        Copiar Nome
+                      </ContextMenuItem>
                     )}
-                  </div>
-                </div>
+                    {canDelete && (
+                      <>
+                        <ContextMenuSeparator />
+                        <ContextMenuItem danger onSelect={() => onDeleteChannel(ch)}>
+                          <Trash2 className="h-3.5 w-3.5" />
+                          Excluir Canal
+                        </ContextMenuItem>
+                      </>
+                    )}
+                  </ContextMenuContent>
+                </ContextMenu>
               );
             })}
           </div>
@@ -253,54 +365,74 @@ export function Sidebar({
 
               return (
                 <div key={ch.id}>
-                  <div
-                    className={`group flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] transition ${
-                      isConnectedHere
-                        ? 'bg-[#1a221d] text-emerald-200'
-                        : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
-                    }`}
-                  >
-                    <button
-                      type="button"
-                      onClick={() => onSelectChannel(ch)}
-                      className="flex min-w-0 flex-1 items-center gap-2 text-left"
-                    >
-                      <Volume2
-                        className={`h-4 w-4 shrink-0 ${
-                          isConnectedHere ? 'text-emerald-400' : 'text-zinc-500'
+                  <ContextMenu>
+                    <ContextMenuTrigger asChild>
+                      <div
+                        className={`group flex items-center justify-between rounded-lg px-2.5 py-1.5 text-[13px] transition ${
+                          isConnectedHere
+                            ? 'bg-[#1a221d] text-emerald-200'
+                            : 'text-zinc-400 hover:bg-white/[0.04] hover:text-zinc-200'
                         }`}
-                      />
-                      <span className={`truncate ${isConnectedHere ? 'font-semibold' : 'font-medium'}`}>
-                        {ch.name}
-                      </span>
-                    </button>
+                      >
+                        <button
+                          type="button"
+                          onClick={() => onSelectChannel(ch)}
+                          className="flex min-w-0 flex-1 items-center gap-2 text-left"
+                        >
+                          <Volume2
+                            className={`h-4 w-4 shrink-0 ${
+                              isConnectedHere ? 'text-emerald-400' : 'text-zinc-500'
+                            }`}
+                          />
+                          <span className={`truncate ${isConnectedHere ? 'font-semibold' : 'font-medium'}`}>
+                            {ch.name}
+                          </span>
+                        </button>
 
-                    <div className="flex items-center gap-1">
-                      {participantUsers.length > 0 && (
-                        <span className="rounded bg-white/[0.06] px-1.5 py-0.2 text-[10px] font-medium tabular-nums text-zinc-400 group-hover:hidden">
-                          {participantUsers.length}
-                        </span>
-                      )}
-                      <ActionTooltip label="Renomear canal">
-                        <button
-                          type="button"
-                          onClick={() => onOpenRenameChannel(ch)}
-                          className="hidden rounded p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white group-hover:inline-flex"
-                        >
-                          <Pencil className="h-3 w-3" />
-                        </button>
-                      </ActionTooltip>
-                      <ActionTooltip label="Excluir canal">
-                        <button
-                          type="button"
-                          onClick={() => onDeleteChannel(ch)}
-                          className="hidden rounded p-1 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
-                        >
-                          <Trash2 className="h-3 w-3" />
-                        </button>
-                      </ActionTooltip>
-                    </div>
-                  </div>
+                        <div className="flex items-center gap-1">
+                          {participantUsers.length > 0 && (
+                            <span className="rounded bg-white/[0.06] px-1.5 py-0.2 text-[10px] font-medium tabular-nums text-zinc-400 group-hover:hidden">
+                              {participantUsers.length}
+                            </span>
+                          )}
+                          <ActionTooltip label="Renomear canal">
+                            <button
+                              type="button"
+                              onClick={() => onOpenRenameChannel(ch)}
+                              className="hidden rounded p-1 text-zinc-400 transition hover:bg-white/10 hover:text-white group-hover:inline-flex"
+                            >
+                              <Pencil className="h-3 w-3" />
+                            </button>
+                          </ActionTooltip>
+                          <ActionTooltip label="Excluir canal">
+                            <button
+                              type="button"
+                              onClick={() => onDeleteChannel(ch)}
+                              className="hidden rounded p-1 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300 group-hover:inline-flex"
+                            >
+                              <Trash2 className="h-3 w-3" />
+                            </button>
+                          </ActionTooltip>
+                        </div>
+                      </div>
+                    </ContextMenuTrigger>
+                    <ContextMenuContent>
+                      <ContextMenuLabel>{ch.name}</ContextMenuLabel>
+                      <ContextMenuItem onSelect={() => onSelectChannel(ch)}>
+                        <Volume2 className="h-3.5 w-3.5 text-emerald-400" />
+                        {isConnectedHere ? 'Abrir Palco' : 'Entrar na Chamada'}
+                      </ContextMenuItem>
+                      <ContextMenuItem onSelect={() => onOpenRenameChannel(ch)}>
+                        <Pencil className="h-3.5 w-3.5 text-zinc-400" />
+                        Renomear Canal
+                      </ContextMenuItem>
+                      <ContextMenuSeparator />
+                      <ContextMenuItem danger onSelect={() => onDeleteChannel(ch)}>
+                        <Trash2 className="h-3.5 w-3.5" />
+                        Excluir Canal
+                      </ContextMenuItem>
+                    </ContextMenuContent>
+                  </ContextMenu>
 
                   {/* Participantes dentro do canal de voz */}
                   {participantUsers.length > 0 && (
@@ -426,6 +558,8 @@ export function Sidebar({
           channel={connectedVoiceChannel}
           voiceState={voiceConnectionState}
           connectedAt={connectedAt}
+          telemetry={voiceTelemetry}
+          rnnoiseEnabled={rnnoiseEnabled}
           screenSharing={screenSharing}
           viewingStage={viewingVoiceStage}
           totalUnreadCount={totalUnreadCount}

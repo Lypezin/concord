@@ -32,6 +32,11 @@ import {
 
 export type VoiceConnectionState = 'disconnected' | 'connecting' | 'connected' | 'reconnecting';
 
+export interface VoiceTelemetry {
+  rttMs: number | null;
+  quality: 'excellent' | 'good' | 'poor' | 'unknown';
+}
+
 export interface ScreenShareOptions {
   sourceId: string;
   includeSystemAudio: boolean;
@@ -105,6 +110,10 @@ export function useVoiceRoom(options: {
   const [remoteSpeakingIds, setRemoteSpeakingIds] = useState<string[]>([]);
   const [localSpeaking, setLocalSpeaking] = useState(false);
   const [screenShares, setScreenShares] = useState<ScreenShareStream[]>([]);
+  const [telemetry, setTelemetry] = useState<VoiceTelemetry>({
+    rttMs: null,
+    quality: 'unknown',
+  });
 
   const roomRef = useRef<Room | null>(null);
   const micTrackRef = useRef<LocalAudioTrack | null>(null);
@@ -1041,6 +1050,77 @@ export function useVoiceRoom(options: {
     });
   }, [toggleMute, toggleDeafen]);
 
+  // Poll real-time WebRTC RTT / connection quality while connected to a voice channel
+  useEffect(() => {
+    if (voiceState !== 'connected') {
+      setTelemetry({ rttMs: null, quality: 'unknown' });
+      return;
+    }
+
+    let cancelled = false;
+    const pollStats = async () => {
+      const room = roomRef.current;
+      if (!room || cancelled) return;
+
+      const rawQuality = String(room.localParticipant.connectionQuality ?? 'unknown').toLowerCase();
+      let quality: VoiceTelemetry['quality'] =
+        rawQuality === 'excellent'
+          ? 'excellent'
+          : rawQuality === 'good'
+            ? 'good'
+            : rawQuality === 'poor'
+              ? 'poor'
+              : 'unknown';
+
+      let rttMs: number | null = null;
+      try {
+        const engine = (
+          room as unknown as {
+            engine?: {
+              pcManager?: {
+                publisher?: { pc?: RTCPeerConnection };
+                subscriber?: { pc?: RTCPeerConnection };
+              };
+            };
+          }
+        ).engine;
+
+        const pc = engine?.pcManager?.publisher?.pc ?? engine?.pcManager?.subscriber?.pc;
+        if (pc && typeof pc.getStats === 'function') {
+          const stats = await pc.getStats();
+          stats.forEach((report) => {
+            if (
+              report.type === 'candidate-pair' &&
+              (report.state === 'succeeded' || report.nominated) &&
+              typeof report.currentRoundTripTime === 'number'
+            ) {
+              rttMs = Math.round(report.currentRoundTripTime * 1000);
+            }
+          });
+        }
+      } catch {
+        // non-fatal stats read failure
+      }
+
+      if (quality === 'unknown' && rttMs !== null) {
+        quality = rttMs < 60 ? 'excellent' : rttMs < 140 ? 'good' : 'poor';
+      }
+
+      if (!cancelled) {
+        setTelemetry((prev) =>
+          prev.rttMs === rttMs && prev.quality === quality ? prev : { rttMs, quality },
+        );
+      }
+    };
+
+    void pollStats();
+    const timer = setInterval(() => void pollStats(), 2500);
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+    };
+  }, [voiceState]);
+
   const speakingUserIds =
     localSpeaking && currentUserId && !remoteSpeakingIds.includes(currentUserId)
       ? [...remoteSpeakingIds, currentUserId]
@@ -1059,6 +1139,7 @@ export function useVoiceRoom(options: {
     screenSharing,
     speakingUserIds,
     screenShares,
+    telemetry,
     joinVoice,
     leaveVoice,
     toggleMute,
