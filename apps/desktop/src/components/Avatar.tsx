@@ -15,7 +15,7 @@ export function Avatar({
   size = 'md',
   status,
   speaking = false,
-  ringBg = 'border-[#0d1017]',
+  ringBg = 'border-[#0c0c0e]',
 }: AvatarProps) {
   const sizeClass =
     size === 'xs'
@@ -34,26 +34,17 @@ export function Avatar({
   return (
     <div className="relative inline-flex shrink-0 select-none">
       <div
-        className={`${sizeClass} relative flex items-center justify-center overflow-hidden rounded-full font-semibold tracking-tight text-white ring-1 ring-inset ring-white/20 transition-shadow ${
+        className={`${sizeClass} relative flex items-center justify-center overflow-hidden rounded-full font-semibold tracking-tight text-white ring-1 ring-inset ring-black/20 transition-shadow ${
           speaking ? 'speaking-halo' : ''
         }`}
         style={{ backgroundColor: color }}
       >
-        <div
-          className="pointer-events-none absolute inset-0"
-          style={{
-            background:
-              'linear-gradient(135deg, rgba(255,255,255,0.24) 0%, rgba(255,255,255,0) 58%)',
-          }}
-        />
-        <span className="relative z-10 drop-shadow-xs">{getInitials(displayName)}</span>
+        <span>{getInitials(displayName)}</span>
       </div>
       {status && (
         <span
           className={`absolute -bottom-0.5 -right-0.5 ${dotSize} rounded-full border-2 ${ringBg} ${
-            status === 'online'
-              ? 'bg-emerald-400 shadow-[0_0_6px_rgba(52,211,153,0.7)]'
-              : 'bg-slate-500'
+            status === 'online' ? 'bg-[#23a55a]' : 'bg-zinc-500'
           }`}
         />
       )}

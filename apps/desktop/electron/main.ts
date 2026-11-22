@@ -204,7 +204,7 @@ function setupDisplayMediaHandler(): void {
     try {
       const sources = await desktopCapturer.getSources({
         types: ['screen', 'window'],
-        thumbnailSize: { width: 0, height: 0 },
+        thumbnailSize: { width: 16, height: 16 },
       });
       const selection =
         pendingScreenSelection && Date.now() - pendingScreenSelection.createdAt < 15000
@@ -274,13 +274,13 @@ function createWindow(): void {
     height: 800,
     minWidth: 960,
     minHeight: 620,
-    backgroundColor: '#06070b',
+    backgroundColor: '#0c0c0e',
     icon: icon.isEmpty() ? undefined : icon,
     titleBarStyle: 'hidden',
     titleBarOverlay: {
-      color: '#06070b',
-      symbolColor: '#94a3b8',
-      height: 38,
+      color: '#0c0c0e',
+      symbolColor: '#a1a1aa',
+      height: 36,
     },
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),

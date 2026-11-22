@@ -41,6 +41,7 @@ export class RNNoiseAudioProcessor
   private sourceNode?: MediaStreamAudioSourceNode;
   private workletNode?: RnnoiseWorkletNode;
   private destinationNode?: MediaStreamAudioDestinationNode;
+  private keepAliveGain?: GainNode;
 
   async init(opts: AudioProcessorOptions): Promise<void> {
     try {
@@ -69,8 +70,14 @@ export class RNNoiseAudioProcessor
       });
       this.destinationNode = targetContext.createMediaStreamDestination();
 
+      // Mantém o clock de áudio do Chromium puxando o AudioWorklet continuamente sem emitir som local
+      this.keepAliveGain = targetContext.createGain();
+      this.keepAliveGain.gain.value = 0;
+
       this.sourceNode.connect(this.workletNode);
       this.workletNode.connect(this.destinationNode);
+      this.workletNode.connect(this.keepAliveGain);
+      this.keepAliveGain.connect(targetContext.destination);
 
       const outputTrack = this.destinationNode.stream.getAudioTracks()[0];
       this.processedTrack = outputTrack ?? opts.track;
@@ -99,6 +106,11 @@ export class RNNoiseAudioProcessor
       // ignore
     }
     try {
+      this.keepAliveGain?.disconnect();
+    } catch {
+      // ignore
+    }
+    try {
       this.destinationNode?.disconnect();
       for (const t of this.destinationNode?.stream.getTracks() ?? []) {
         t.stop();
@@ -113,6 +125,7 @@ export class RNNoiseAudioProcessor
 
     this.sourceNode = undefined;
     this.workletNode = undefined;
+    this.keepAliveGain = undefined;
     this.destinationNode = undefined;
     this.processedTrack = undefined;
   }

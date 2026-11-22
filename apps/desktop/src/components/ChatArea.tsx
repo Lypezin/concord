@@ -12,7 +12,6 @@ import {
 import type { Attachment, Channel, Message, UserPublic } from '@concord/shared';
 import {
   ChevronUp,
-  Crown,
   Download,
   FileText,
   Hash,
@@ -122,7 +121,7 @@ function renderFormattedText(text: string): ReactNode {
               e.preventDefault();
               openExternalUrl(cleanUrl);
             }}
-            className="text-indigo-400 underline decoration-indigo-400/40 underline-offset-2 transition hover:text-indigo-300"
+            className="text-[#7289da] underline decoration-[#7289da]/40 underline-offset-2 transition hover:text-[#99aab5]"
           >
             {cleanUrl}
           </a>,
@@ -135,7 +134,7 @@ function renderFormattedText(text: string): ReactNode {
       nodes.push(
         <code
           key={key++}
-          className="rounded-md border border-indigo-400/20 bg-indigo-500/12 px-1.5 py-0.5 font-mono text-[12.5px] text-indigo-200"
+          className="rounded border border-white/[0.08] bg-[#0c0c0e] px-1.5 py-0.5 font-mono text-[12.5px] text-zinc-200"
         >
           {token.slice(1, -1)}
         </code>,
@@ -148,13 +147,13 @@ function renderFormattedText(text: string): ReactNode {
       );
     } else if (token.startsWith('~~') && token.endsWith('~~')) {
       nodes.push(
-        <del key={key++} className="text-slate-400 line-through">
+        <del key={key++} className="text-zinc-500 line-through">
           {token.slice(2, -2)}
         </del>,
       );
     } else if (token.startsWith('*') && token.endsWith('*')) {
       nodes.push(
-        <em key={key++} className="italic text-slate-100">
+        <em key={key++} className="italic text-zinc-100">
           {token.slice(1, -1)}
         </em>,
       );
@@ -215,7 +214,6 @@ export function ChatArea({
     pendingUploadsRef.current = pendingUploads;
   }, [pendingUploads]);
 
-  // Reset editing state when changing channels
   useEffect(() => {
     setEditingId(null);
     setComposerError(null);
@@ -224,7 +222,6 @@ export function ChatArea({
     composerRef.current?.focus();
   }, [channel.id]);
 
-  // Auto-resize composer textarea cleanly
   useEffect(() => {
     const el = composerRef.current;
     if (!el) return;
@@ -232,7 +229,6 @@ export function ChatArea({
     el.style.height = `${Math.min(el.scrollHeight, 144)}px`;
   }, [draft]);
 
-  // Close emoji popover on outside click
   useEffect(() => {
     if (!showEmojiPicker) return;
     const handleClick = (e: MouseEvent) => {
@@ -244,7 +240,6 @@ export function ChatArea({
     return () => document.removeEventListener('mousedown', handleClick);
   }, [showEmojiPicker]);
 
-  // Close image lightbox on Escape key
   useEffect(() => {
     if (!lightboxImage) return;
     const onKeyDown = (e: globalThis.KeyboardEvent) => {
@@ -256,7 +251,6 @@ export function ChatArea({
     return () => window.removeEventListener('keydown', onKeyDown);
   }, [lightboxImage]);
 
-  // Cleanup object URLs on unmount without stale closure
   useEffect(() => {
     return () => {
       for (const item of pendingUploadsRef.current) {
@@ -265,7 +259,6 @@ export function ChatArea({
     };
   }, []);
 
-  // Smart scroll management
   useLayoutEffect(() => {
     const el = scrollContainerRef.current;
     if (!el) return;
@@ -485,7 +478,7 @@ export function ChatArea({
 
   return (
     <section
-      className="concord-island relative flex min-w-0 flex-1 flex-col overflow-hidden rounded-2xl border border-white/[0.08] bg-[#0e121c]/95"
+      className="relative flex min-w-0 flex-1 flex-col bg-[#141418]"
       onDragOver={(e) => {
         e.preventDefault();
         setIsDragging(true);
@@ -497,58 +490,36 @@ export function ChatArea({
       }}
       onDrop={handleDrop}
     >
-      <div className="pointer-events-none absolute inset-x-0 top-0 h-36 bg-gradient-to-b from-indigo-500/[0.06] to-transparent" />
-
       {/* Overlay de Drag & Drop */}
       {isDragging && (
-        <div className="animate-modal-in pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-indigo-400/70 bg-indigo-950/80 backdrop-blur-md">
-          <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-indigo-500/20 text-indigo-300 ring-1 ring-inset ring-indigo-400/30">
-            <UploadCloud className="h-7 w-7" />
-          </div>
+        <div className="animate-modal-in pointer-events-none absolute inset-3 z-40 flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-white/25 bg-[#0c0c0e]/90">
+          <UploadCloud className="mb-2 h-8 w-8 text-zinc-200" />
           <p className="text-sm font-semibold text-white">
             Solte aqui para anexar em #{channel.name}
           </p>
-          <p className="mt-1 text-xs text-indigo-200/80">Imagens e arquivos até 15 MB</p>
+          <p className="mt-0.5 text-xs text-zinc-400">Arquivos até 15 MB</p>
         </div>
       )}
 
       {/* Cabeçalho do Canal */}
-      <div className="relative z-10 flex h-13 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#0e121c]/85 px-4 backdrop-blur-md">
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-xl border border-indigo-400/25 bg-gradient-to-br from-indigo-500/20 to-violet-500/15 text-indigo-300 shadow-sm">
-            <Hash className="h-4 w-4" />
-          </div>
-          <div className="min-w-0">
-            <h3 className="truncate text-sm font-bold tracking-tight text-white">
-              {channel.name}
-            </h3>
-            <p className="truncate text-[10.5px] text-slate-400">
-              Chat em tempo real • Cole imagens com Ctrl+V
-            </p>
-          </div>
+      <div className="flex h-12 shrink-0 items-center justify-between border-b border-white/[0.07] bg-[#141418] px-4">
+        <div className="flex min-w-0 items-center gap-2">
+          <Hash className="h-4 w-4 shrink-0 text-zinc-400" />
+          <h3 className="truncate text-sm font-semibold tracking-tight text-white">
+            {channel.name}
+          </h3>
         </div>
 
         <div className="flex items-center gap-2">
-          <div className="hidden items-center gap-1.5 rounded-xl border border-white/[0.06] bg-[#080a10] px-2.5 py-1 text-[10.5px] text-slate-400 sm:flex">
-            <kbd className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.2 font-mono text-[10px] text-slate-200">
-              Ctrl
-            </kbd>
-            <span>+</span>
-            <kbd className="rounded border border-white/10 bg-white/[0.06] px-1.5 py-0.2 font-mono text-[10px] text-slate-200">
-              V
-            </kbd>
-            <span>para colar prints</span>
-          </div>
-
           {onToggleMembers && (
             <button
               type="button"
               onClick={onToggleMembers}
-              title={showMembers ? 'Ocultar lista de membros' : 'Mostrar lista de membros'}
-              className={`hidden rounded-xl border p-2 transition lg:inline-flex ${
+              title={showMembers ? 'Ocultar membros' : 'Mostrar membros'}
+              className={`hidden rounded-lg p-1.5 transition lg:inline-flex ${
                 showMembers
-                  ? 'border-indigo-400/30 bg-indigo-500/15 text-indigo-200'
-                  : 'border-white/[0.08] bg-white/[0.04] text-slate-400 hover:bg-white/[0.08] hover:text-white'
+                  ? 'bg-white/[0.08] text-white'
+                  : 'text-zinc-400 hover:bg-white/[0.05] hover:text-zinc-200'
               }`}
             >
               <Users className="h-4 w-4" />
@@ -561,11 +532,11 @@ export function ChatArea({
       <div
         ref={scrollContainerRef}
         onScroll={handleScroll}
-        className="relative flex-1 overflow-y-auto px-4 py-4 select-text"
+        className="flex-1 overflow-y-auto px-4 py-4 select-text"
       >
         {loadingMessages ? (
-          <div className="flex h-full items-center justify-center text-slate-400">
-            <Loader2 className="h-6 w-6 animate-spin text-indigo-400" />
+          <div className="flex h-full items-center justify-center text-zinc-400">
+            <Loader2 className="h-5 w-5 animate-spin" />
           </div>
         ) : (
           <div className="space-y-0.5">
@@ -575,7 +546,7 @@ export function ChatArea({
                   type="button"
                   onClick={() => void handleLoadOlderClick()}
                   disabled={loadingOlder}
-                  className="inline-flex items-center gap-1.5 rounded-full border border-white/[0.09] bg-[#080a10] px-3.5 py-1.5 text-xs font-medium text-slate-300 shadow-sm transition hover:border-indigo-400/35 hover:bg-white/[0.05] hover:text-white disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#1c1c22] px-3 py-1.5 text-xs font-medium text-zinc-300 transition hover:bg-[#24242c] hover:text-white disabled:opacity-50"
                 >
                   {loadingOlder ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -588,19 +559,15 @@ export function ChatArea({
             )}
 
             {messages.length === 0 && (
-              <div className="mx-auto my-8 max-w-md rounded-2xl border border-white/[0.07] bg-gradient-to-b from-indigo-500/[0.08] to-[#131826]/70 p-8 text-center shadow-xl">
-                <div className="mx-auto mb-3.5 flex h-13 w-13 items-center justify-center rounded-2xl border border-indigo-400/30 bg-indigo-500/20 text-indigo-200 shadow-[0_0_28px_rgba(99,102,241,0.28)]">
-                  <Hash className="h-6 w-6" />
+              <div className="py-12 text-center">
+                <div className="mx-auto mb-3 flex h-10 w-10 items-center justify-center rounded-xl border border-white/[0.08] bg-[#1c1c22] text-zinc-300">
+                  <Hash className="h-5 w-5" />
                 </div>
-                <h4 className="text-base font-bold tracking-tight text-white">
-                  Bem-vindo a #{channel.name}
+                <h4 className="text-sm font-semibold text-white">
+                  Início de #{channel.name}
                 </h4>
-                <p className="mt-1.5 text-xs leading-relaxed text-slate-400">
-                  Este é o início do canal. Mande uma mensagem, use{' '}
-                  <code className="rounded bg-white/10 px-1.5 py-0.5 font-mono text-[11px] text-indigo-200">
-                    **negrito**
-                  </code>{' '}
-                  ou cole uma captura de tela com Ctrl+V!
+                <p className="mt-1 text-xs text-zinc-400">
+                  Envie a primeira mensagem ou cole uma imagem com Ctrl+V.
                 </p>
               </div>
             )}
@@ -621,29 +588,29 @@ export function ChatArea({
               return (
                 <Fragment key={msg.id}>
                   {isNewDay && (
-                    <div className="my-5 flex items-center gap-3 select-none">
-                      <div className="h-px flex-1 bg-gradient-to-r from-transparent via-white/[0.09] to-white/[0.09]" />
-                      <span className="rounded-full border border-white/[0.08] bg-[#080a10] px-3 py-0.5 text-[10.5px] font-semibold tracking-wide text-slate-300 shadow-sm">
+                    <div className="my-4 flex items-center gap-3 select-none">
+                      <div className="h-px flex-1 bg-white/[0.07]" />
+                      <span className="text-[11px] font-medium text-zinc-500">
                         {formatDateDivider(msg.createdAt)}
                       </span>
-                      <div className="h-px flex-1 bg-gradient-to-l from-transparent via-white/[0.09] to-white/[0.09]" />
+                      <div className="h-px flex-1 bg-white/[0.07]" />
                     </div>
                   )}
 
                   <div
-                    className={`group relative flex gap-3 rounded-xl px-3 py-1 transition hover:bg-white/[0.03] ${
+                    className={`group relative flex gap-3 rounded-lg px-2.5 py-1 transition hover:bg-white/[0.025] ${
                       isGrouped ? 'mt-0' : 'mt-2.5 pt-1.5'
                     }`}
                   >
                     {/* Ações no Hover */}
                     {!isEditing && (
-                      <div className="absolute -top-3.5 right-3 z-10 hidden items-center gap-0.5 rounded-xl border border-white/[0.1] bg-[#080a10]/95 p-0.5 shadow-xl backdrop-blur-md group-hover:flex">
+                      <div className="absolute -top-3 right-2 z-10 hidden items-center gap-0.5 rounded-lg border border-white/[0.09] bg-[#18181d] p-0.5 shadow-lg group-hover:flex">
                         {QUICK_EMOJIS.map((emoji) => (
                           <button
                             key={emoji}
                             type="button"
                             onClick={() => void onToggleReaction(msg.id, emoji)}
-                            className="rounded-lg px-1.5 py-0.5 text-sm transition hover:scale-110 hover:bg-white/10"
+                            className="rounded px-1.5 py-0.5 text-sm transition hover:bg-white/10"
                           >
                             {emoji}
                           </button>
@@ -656,7 +623,7 @@ export function ChatArea({
                               setEditDraft(msg.content);
                             }}
                             title="Editar"
-                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                            className="rounded p-1.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
                           >
                             <Pencil className="h-3.5 w-3.5" />
                           </button>
@@ -666,7 +633,7 @@ export function ChatArea({
                             type="button"
                             onClick={() => void onDeleteMessage(msg.id)}
                             title="Excluir"
-                            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-500/20 hover:text-rose-300"
+                            className="rounded p-1.5 text-zinc-400 transition hover:bg-rose-500/20 hover:text-rose-300"
                           >
                             <Trash2 className="h-3.5 w-3.5" />
                           </button>
@@ -677,7 +644,7 @@ export function ChatArea({
                     {/* Coluna esquerda: Avatar ou Horário agrupado */}
                     <div className="w-9 shrink-0">
                       {isGrouped ? (
-                        <span className="hidden pt-1 text-[10px] font-medium tabular-nums text-slate-500 group-hover:inline-block">
+                        <span className="hidden pt-1 text-[10px] tabular-nums text-zinc-500 group-hover:inline-block">
                           {formatShortTime(msg.createdAt)}
                         </span>
                       ) : (
@@ -685,7 +652,7 @@ export function ChatArea({
                           displayName={msg.author.displayName}
                           color={msg.author.avatarColor}
                           size="md"
-                          ringBg="border-[#0e121c]"
+                          ringBg="border-[#141418]"
                         />
                       )}
                     </div>
@@ -693,17 +660,11 @@ export function ChatArea({
                     {/* Conteúdo da Mensagem */}
                     <div className="min-w-0 flex-1">
                       {!isGrouped && (
-                        <div className="mb-0.5 flex items-center gap-2">
-                          <span className="text-sm font-bold tracking-tight text-white">
+                        <div className="mb-0.5 flex items-baseline gap-2">
+                          <span className="text-sm font-semibold text-white">
                             {msg.author.displayName}
                           </span>
-                          {msg.author.role === 'admin' && (
-                            <span className="inline-flex items-center gap-0.5 rounded-md border border-amber-400/25 bg-amber-500/12 px-1.5 py-0.2 text-[9px] font-bold uppercase text-amber-300">
-                              <Crown className="h-2.5 w-2.5" />
-                              Admin
-                            </span>
-                          )}
-                          <span className="text-[11px] text-slate-500">
+                          <span className="text-[11px] text-zinc-500">
                             {formatMessageTimestamp(msg.createdAt)}
                           </span>
                         </div>
@@ -724,21 +685,21 @@ export function ChatArea({
                                 setEditingId(null);
                               }
                             }}
-                            className="w-full resize-none rounded-xl border border-indigo-500/60 bg-[#080a10] px-3 py-2 text-sm text-slate-100 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                            className="w-full resize-none rounded-lg border border-white/[0.18] bg-[#0c0c0e] px-3 py-2 text-sm text-zinc-100 focus:outline-none"
                           />
-                          <div className="flex items-center gap-2 text-[11px] text-slate-400">
+                          <div className="flex items-center gap-2 text-[11px] text-zinc-400">
                             <span>Enter para salvar • Esc para cancelar</span>
                             <button
                               type="button"
                               onClick={() => void saveEdit(msg.id)}
-                              className="font-semibold text-indigo-400 hover:underline"
+                              className="font-semibold text-white hover:underline"
                             >
                               Salvar
                             </button>
                             <button
                               type="button"
                               onClick={() => setEditingId(null)}
-                              className="text-slate-400 hover:underline"
+                              className="text-zinc-400 hover:underline"
                             >
                               Cancelar
                             </button>
@@ -746,10 +707,10 @@ export function ChatArea({
                         </div>
                       ) : (
                         msg.content && (
-                          <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-slate-200">
+                          <p className="whitespace-pre-wrap break-words text-[13.5px] leading-relaxed text-zinc-200">
                             {renderFormattedText(msg.content)}
                             {msg.editedAt && (
-                              <span className="ml-1.5 text-[10px] text-slate-500">(editada)</span>
+                              <span className="ml-1.5 text-[10px] text-zinc-500">(editada)</span>
                             )}
                           </p>
                         )
@@ -768,7 +729,7 @@ export function ChatArea({
                                   onClick={() =>
                                     setLightboxImage({ url: fullUrl, name: att.originalName })
                                   }
-                                  className="group/img relative overflow-hidden rounded-2xl border border-white/[0.09] bg-[#080a10] shadow-lg transition hover:border-indigo-400/50 hover:shadow-indigo-500/15"
+                                  className="overflow-hidden rounded-lg border border-white/[0.08] bg-[#0c0c0e] transition hover:border-white/[0.2]"
                                 >
                                   <img
                                     src={fullUrl}
@@ -780,7 +741,7 @@ export function ChatArea({
                                         el.scrollTop = el.scrollHeight;
                                       }
                                     }}
-                                    className="max-h-72 max-w-sm object-contain transition duration-200 group-hover/img:scale-[1.015] group-hover/img:brightness-105"
+                                    className="max-h-72 max-w-sm object-contain"
                                   />
                                 </button>
                               );
@@ -791,20 +752,18 @@ export function ChatArea({
                                 key={att.id}
                                 type="button"
                                 onClick={() => openExternalUrl(fullUrl)}
-                                className="flex items-center gap-2.5 rounded-xl border border-white/[0.09] bg-[#080a10] px-3 py-2 text-left shadow-sm transition hover:border-indigo-500/45 hover:bg-white/[0.04]"
+                                className="flex items-center gap-2.5 rounded-lg border border-white/[0.08] bg-[#1a1a20] px-3 py-2 text-left transition hover:border-white/[0.16] hover:bg-[#202028]"
                               >
-                                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-indigo-500/15 text-indigo-300">
-                                  <FileText className="h-4 w-4" />
-                                </div>
+                                <FileText className="h-4 w-4 shrink-0 text-zinc-300" />
                                 <div className="min-w-0 max-w-[200px]">
-                                  <div className="truncate text-xs font-medium text-slate-200">
+                                  <div className="truncate text-xs font-medium text-zinc-200">
                                     {att.originalName}
                                   </div>
-                                  <div className="text-[10px] text-slate-500">
+                                  <div className="text-[10px] text-zinc-500">
                                     {formatFileSize(att.size)}
                                   </div>
                                 </div>
-                                <Download className="h-4 w-4 shrink-0 text-slate-400" />
+                                <Download className="h-4 w-4 shrink-0 text-zinc-400" />
                               </button>
                             );
                           })}
@@ -813,7 +772,7 @@ export function ChatArea({
 
                       {/* Reações */}
                       {msg.reactions.length > 0 && (
-                        <div className="mt-1.5 flex flex-wrap gap-1.5">
+                        <div className="mt-1.5 flex flex-wrap gap-1">
                           {msg.reactions.map((r) => {
                             const reactedByMe = r.userIds.includes(currentUser.id);
                             return (
@@ -821,14 +780,14 @@ export function ChatArea({
                                 key={r.emoji}
                                 type="button"
                                 onClick={() => void onToggleReaction(msg.id, r.emoji)}
-                                className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-xs transition ${
+                                className={`inline-flex items-center gap-1.5 rounded-md border px-2 py-0.5 text-xs transition ${
                                   reactedByMe
-                                    ? 'border-indigo-400/50 bg-indigo-500/20 text-indigo-100 shadow-sm'
-                                    : 'border-white/[0.08] bg-[#080a10]/85 text-slate-300 hover:border-white/20 hover:bg-white/[0.08]'
+                                    ? 'border-[#5865f2]/60 bg-[#5865f2]/15 text-zinc-100'
+                                    : 'border-white/[0.08] bg-[#1c1c22] text-zinc-300 hover:bg-[#24242c]'
                                 }`}
                               >
                                 <span>{r.emoji}</span>
-                                <span className="font-mono text-[11px] font-semibold tabular-nums">
+                                <span className="font-mono text-[11px] font-medium tabular-nums">
                                   {r.userIds.length}
                                 </span>
                               </button>
@@ -846,13 +805,13 @@ export function ChatArea({
       </div>
 
       {/* Indicador de Digitando */}
-      <div className="flex h-6 shrink-0 items-center px-4 text-[11px] text-slate-400">
+      <div className="flex h-5 shrink-0 items-center px-4 text-[11px] text-zinc-400">
         {typingText && (
           <div className="inline-flex items-center gap-2">
             <span className="inline-flex items-center gap-1" aria-hidden="true">
-              <span className="typing-dot-1 h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              <span className="typing-dot-2 h-1.5 w-1.5 rounded-full bg-indigo-400" />
-              <span className="typing-dot-3 h-1.5 w-1.5 rounded-full bg-indigo-400" />
+              <span className="typing-dot-1 h-1.5 w-1.5 rounded-full bg-zinc-400" />
+              <span className="typing-dot-2 h-1.5 w-1.5 rounded-full bg-zinc-400" />
+              <span className="typing-dot-3 h-1.5 w-1.5 rounded-full bg-zinc-400" />
             </span>
             <span>{typingText}...</span>
           </div>
@@ -860,9 +819,9 @@ export function ChatArea({
       </div>
 
       {/* Área de Composição */}
-      <div className="shrink-0 px-4 pb-3.5">
+      <div className="shrink-0 px-4 pb-4">
         {composerError && (
-          <div className="mb-2 flex items-center justify-between rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200">
+          <div className="mb-2 flex items-center justify-between rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs text-rose-200">
             <span>{composerError}</span>
             <button type="button" onClick={() => setComposerError(null)}>
               <X className="h-3.5 w-3.5" />
@@ -872,26 +831,26 @@ export function ChatArea({
 
         {/* Pré-visualização de Anexos */}
         {pendingUploads.length > 0 && (
-          <div className="mb-2 flex flex-wrap gap-2 rounded-2xl border border-white/[0.08] bg-[#080a10]/90 p-2.5">
+          <div className="mb-2 flex flex-wrap gap-2 rounded-lg border border-white/[0.08] bg-[#1a1a20] p-2.5">
             {pendingUploads.map((item) => (
               <div
                 key={item.localId}
-                className="relative flex items-center gap-2 rounded-xl border border-white/[0.08] bg-[#131724] p-1.5 pr-7"
+                className="relative flex items-center gap-2 rounded-lg border border-white/[0.08] bg-[#121216] p-1.5 pr-7"
               >
                 {item.previewUrl ? (
                   <img
                     src={item.previewUrl}
                     alt={item.file.name}
-                    className="h-12 w-12 rounded-lg object-cover"
+                    className="h-11 w-11 rounded object-cover"
                   />
                 ) : (
-                  <FileText className="h-6 w-6 text-indigo-400" />
+                  <FileText className="h-5 w-5 text-zinc-300" />
                 )}
                 <div className="max-w-[140px]">
-                  <div className="truncate text-xs font-medium text-slate-200">
+                  <div className="truncate text-xs font-medium text-zinc-200">
                     {item.file.name || 'imagem.png'}
                   </div>
-                  <div className="text-[10px] text-slate-400">
+                  <div className="text-[10px] text-zinc-500">
                     {item.status === 'uploading'
                       ? 'Enviando...'
                       : item.status === 'error'
@@ -902,7 +861,7 @@ export function ChatArea({
                 <button
                   type="button"
                   onClick={() => removePendingUpload(item.localId)}
-                  className="absolute right-1 top-1 rounded-md p-0.5 text-slate-400 transition hover:bg-white/10 hover:text-white"
+                  className="absolute right-1 top-1 rounded p-0.5 text-zinc-400 transition hover:bg-white/10 hover:text-white"
                 >
                   <X className="h-3.5 w-3.5" />
                 </button>
@@ -911,18 +870,18 @@ export function ChatArea({
           </div>
         )}
 
-        <div className="relative flex items-end gap-2 rounded-2xl border border-white/[0.1] bg-[#080a10]/95 px-3 py-2.5 shadow-inner transition focus-within:border-indigo-500/60 focus-within:ring-2 focus-within:ring-indigo-500/15">
+        <div className="relative flex items-end gap-2 rounded-xl border border-white/[0.08] bg-[#1c1c22] px-3 py-2 transition focus-within:border-white/[0.18]">
           {showEmojiPicker && (
             <div
               ref={emojiPopoverRef}
-              className="animate-modal-in concord-glass absolute bottom-14 right-2 z-30 grid w-64 grid-cols-8 gap-1 rounded-2xl border border-white/[0.1] bg-[#131724]/98 p-2.5 backdrop-blur-xl"
+              className="animate-modal-in concord-panel absolute bottom-13 right-2 z-30 grid w-64 grid-cols-8 gap-1 rounded-xl border border-white/[0.09] bg-[#18181d] p-2"
             >
               {PICKER_EMOJIS.map((emoji) => (
                 <button
                   key={emoji}
                   type="button"
                   onClick={() => insertEmojiAtCursor(emoji)}
-                  className="flex h-7 w-7 items-center justify-center rounded-lg text-base transition hover:scale-110 hover:bg-white/10"
+                  className="flex h-7 w-7 items-center justify-center rounded-md text-base transition hover:bg-white/10"
                 >
                   {emoji}
                 </button>
@@ -946,7 +905,7 @@ export function ChatArea({
             type="button"
             onClick={() => fileInputRef.current?.click()}
             title="Anexar arquivo ou imagem"
-            className="mb-0.5 rounded-xl border border-white/[0.06] bg-white/[0.04] p-1.5 text-slate-300 transition hover:bg-white/[0.1] hover:text-white"
+            className="mb-0.5 rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
           >
             <Paperclip className="h-4 w-4" />
           </button>
@@ -962,18 +921,18 @@ export function ChatArea({
               lastTypingPingRef.current = 0;
               onTypingSignal(false);
             }}
-            placeholder={`Conversar em #${channel.name}...`}
-            className="max-h-36 min-h-[24px] flex-1 resize-none bg-transparent py-1 text-sm text-slate-100 placeholder:text-slate-500 focus:outline-none"
+            placeholder={`Mensagem em #${channel.name}`}
+            className="max-h-36 min-h-[24px] flex-1 resize-none bg-transparent py-1 text-sm text-zinc-100 placeholder:text-zinc-500 focus:outline-none"
           />
 
           <button
             type="button"
             onClick={() => setShowEmojiPicker((prev) => !prev)}
             title="Inserir emoji"
-            className={`mb-0.5 rounded-xl p-1.5 transition ${
+            className={`mb-0.5 rounded-lg p-1.5 transition ${
               showEmojiPicker
-                ? 'bg-indigo-500/25 text-indigo-200'
-                : 'text-slate-400 hover:bg-white/[0.08] hover:text-white'
+                ? 'bg-white/[0.1] text-white'
+                : 'text-zinc-400 hover:bg-white/[0.07] hover:text-white'
             }`}
           >
             <Smile className="h-4 w-4" />
@@ -988,7 +947,7 @@ export function ChatArea({
                 !pendingUploads.some((p) => p.status === 'ready'))
             }
             title="Enviar (Enter)"
-            className="mb-0.5 inline-flex items-center gap-1 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3 py-1.5 text-xs font-semibold text-white shadow-md shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-35 disabled:shadow-none"
+            className="mb-0.5 rounded-lg bg-[#5865f2] p-1.5 text-white transition hover:bg-[#4752c4] disabled:opacity-35"
           >
             {sending ? (
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -1002,10 +961,10 @@ export function ChatArea({
       {/* Lightbox de Imagem */}
       {lightboxImage && (
         <div
-          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 p-6 backdrop-blur-md"
+          className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-black/85 p-6"
           onClick={() => setLightboxImage(null)}
         >
-          <div className="mb-3 flex w-full max-w-4xl items-center justify-between text-xs text-slate-300">
+          <div className="mb-3 flex w-full max-w-4xl items-center justify-between text-xs text-zinc-300">
             <span className="truncate font-medium">{lightboxImage.name}</span>
             <div className="flex items-center gap-2">
               <button
@@ -1014,7 +973,7 @@ export function ChatArea({
                   e.stopPropagation();
                   openExternalUrl(lightboxImage.url);
                 }}
-                className="inline-flex items-center gap-1.5 rounded-xl border border-white/10 bg-white/10 px-3 py-1.5 font-medium text-white transition hover:bg-white/20"
+                className="inline-flex items-center gap-1.5 rounded-lg border border-white/10 bg-[#18181d] px-3 py-1.5 font-medium text-white transition hover:bg-[#24242c]"
               >
                 <Download className="h-3.5 w-3.5" />
                 Abrir / Baixar
@@ -1023,7 +982,7 @@ export function ChatArea({
                 type="button"
                 onClick={() => setLightboxImage(null)}
                 title="Fechar (Esc)"
-                className="rounded-xl border border-white/10 bg-white/10 p-1.5 text-slate-200 transition hover:bg-white/20 hover:text-white"
+                className="rounded-lg border border-white/10 bg-[#18181d] p-1.5 text-zinc-300 transition hover:bg-[#24242c] hover:text-white"
               >
                 <X className="h-4 w-4" />
               </button>
@@ -1033,7 +992,7 @@ export function ChatArea({
             src={lightboxImage.url}
             alt={lightboxImage.name}
             onClick={(e) => e.stopPropagation()}
-            className="animate-modal-in max-h-[82vh] max-w-full rounded-2xl border border-white/10 object-contain shadow-2xl"
+            className="animate-modal-in max-h-[82vh] max-w-full rounded-lg border border-white/10 object-contain shadow-2xl"
           />
         </div>
       )}

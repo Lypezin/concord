@@ -514,7 +514,7 @@ export function App() {
   }, [activeChannel, session, typingByChannel, users]);
 
   return (
-    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#06070b] text-slate-100">
+    <div className="flex h-screen w-screen flex-col overflow-hidden bg-[#0c0c0e] text-zinc-100">
       <TitleBar
         connectionState={session ? connectionState : null}
         serverName={serverStatus?.serverName || 'Concord'}
@@ -525,38 +525,34 @@ export function App() {
       />
 
       {bootstrapping ? (
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#06070b]">
-          <div className="pointer-events-none absolute -top-24 left-1/2 h-72 w-72 -translate-x-1/2 rounded-full bg-indigo-500/15 blur-3xl" />
-          <div className="flex flex-col items-center gap-3">
-            <Loader2 className="h-7 w-7 animate-spin text-indigo-400" />
-            <span className="text-xs font-medium tracking-wide text-slate-400">
+        <div className="flex flex-1 items-center justify-center bg-[#0c0c0e]">
+          <div className="flex flex-col items-center gap-2.5">
+            <Loader2 className="h-6 w-6 animate-spin text-zinc-400" />
+            <span className="text-xs font-medium text-zinc-500">
               Iniciando Concord...
             </span>
           </div>
         </div>
       ) : !session && pendingOfflineSession ? (
-        <div className="relative flex flex-1 items-center justify-center overflow-hidden bg-[#06070b] p-6">
-          <div className="pointer-events-none absolute -left-24 -top-24 h-96 w-96 rounded-full bg-indigo-600/15 blur-[120px]" />
-          <div className="pointer-events-none absolute -bottom-24 -right-24 h-96 w-96 rounded-full bg-amber-500/10 blur-[120px]" />
-          <div className="concord-glass relative w-full max-w-md space-y-5 overflow-hidden rounded-2xl border border-white/[0.08] bg-[#121622]/90 p-7 text-center backdrop-blur-xl">
-            <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-amber-400/50 to-transparent" />
-            <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl border border-amber-400/25 bg-amber-500/12 text-amber-300 shadow-[0_0_28px_rgba(245,158,11,0.2)]">
-              <ServerOff className="h-6 w-6 animate-pulse" />
+        <div className="flex flex-1 items-center justify-center bg-[#0c0c0e] p-6">
+          <div className="concord-panel w-full max-w-md space-y-5 rounded-xl border border-white/[0.08] bg-[#16161b] p-6 text-center">
+            <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-xl border border-amber-500/25 bg-amber-500/10 text-amber-300">
+              <ServerOff className="h-5 w-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold tracking-tight text-white">
-                Aguardando o servidor Concord ficar online...
+              <h2 className="text-base font-semibold tracking-tight text-white">
+                Aguardando o servidor ficar online...
               </h2>
-              <p className="mt-2 text-xs leading-relaxed text-slate-400">
+              <p className="mt-1.5 text-xs leading-relaxed text-zinc-400">
                 Tentando reconectar em{' '}
-                <span className="inline-block rounded-md border border-white/10 bg-[#0a0d14] px-2 py-0.5 font-mono text-[11px] text-slate-200">
+                <span className="rounded border border-white/[0.08] bg-[#0c0c0e] px-1.5 py-0.5 font-mono text-[11px] text-zinc-200">
                   {pendingOfflineSession.serverUrl}
                 </span>{' '}
                 automaticamente a cada 4 segundos.
               </p>
             </div>
 
-            <div className="flex flex-col gap-2.5 pt-1">
+            <div className="flex flex-col gap-2">
               <button
                 type="button"
                 disabled={retryingOffline}
@@ -566,7 +562,7 @@ export function App() {
                     setRetryingOffline(false),
                   );
                 }}
-                className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2.5 text-xs font-semibold text-white shadow-lg shadow-indigo-500/25 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
+                className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[#5865f2] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
               >
                 {retryingOffline ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
@@ -579,7 +575,7 @@ export function App() {
               <button
                 type="button"
                 onClick={() => void handleLogout()}
-                className="rounded-xl border border-white/[0.08] bg-white/[0.04] px-4 py-2 text-xs font-medium text-slate-300 transition hover:bg-white/[0.08] hover:text-white"
+                className="rounded-lg border border-white/[0.08] bg-[#202027] px-4 py-2 text-xs font-medium text-zinc-300 transition hover:bg-[#292932] hover:text-white"
               >
                 Trocar de servidor / Sair
               </button>
@@ -589,10 +585,7 @@ export function App() {
       ) : !session || !api ? (
         <AuthScreen onAuthenticated={(url, auth, st) => void handleAuthenticated(url, auth, st)} />
       ) : (
-        <div className="relative flex min-h-0 flex-1 gap-2 bg-[#06070b] p-2 pt-0">
-          <div className="pointer-events-none absolute -left-24 top-0 h-80 w-80 rounded-full bg-indigo-600/12 blur-[120px]" />
-          <div className="pointer-events-none absolute bottom-0 right-0 h-80 w-80 rounded-full bg-violet-600/10 blur-[120px]" />
-
+        <div className="flex min-h-0 flex-1 bg-[#141418]">
           <Sidebar
             serverName={serverStatus?.serverName || 'Concord'}
             userCount={users.length || serverStatus?.userCount || 1}
@@ -613,7 +606,6 @@ export function App() {
             muted={voice.muted}
             deafened={voice.deafened}
             screenSharing={voice.screenSharing}
-            rnnoiseEnabled={voice.settings.rnnoiseEnabled}
             viewingVoiceStage={viewingVoiceStage}
             userVolumes={voice.settings.userVolumes}
             onSelectChannel={handleSelectChannel}
@@ -662,7 +654,6 @@ export function App() {
               screenSharing={voice.screenSharing}
               muted={voice.muted}
               deafened={voice.deafened}
-              rnnoiseEnabled={voice.settings.rnnoiseEnabled}
               userVolumes={voice.settings.userVolumes}
               streamVolumes={voice.settings.streamVolumes}
               focusedShareId={focusedShareId}
@@ -719,8 +710,8 @@ export function App() {
               }}
             />
           ) : (
-            <div className="concord-island flex flex-1 flex-col items-center justify-center rounded-2xl border border-white/[0.08] bg-[#0e121c]/95 text-slate-400">
-              <Volume2 className="mb-2 h-8 w-8 text-slate-500" />
+            <div className="flex flex-1 flex-col items-center justify-center bg-[#141418] text-zinc-400">
+              <Volume2 className="mb-2 h-8 w-8 text-zinc-500" />
               <p className="text-sm">Selecione um canal de texto para conversar.</p>
             </div>
           )}
@@ -738,7 +729,7 @@ export function App() {
       )}
 
       {toast && (
-        <div className="animate-toast-in fixed bottom-5 left-1/2 z-50 rounded-xl border border-indigo-400/35 bg-[#0e121c]/95 px-4 py-2.5 text-xs font-medium text-indigo-100 shadow-[0_12px_36px_rgba(0,0,0,0.65)] backdrop-blur-md">
+        <div className="animate-toast-in fixed bottom-5 left-1/2 z-50 rounded-lg border border-white/[0.1] bg-[#18181d] px-4 py-2 text-xs font-medium text-zinc-100 shadow-2xl">
           {toast}
         </div>
       )}

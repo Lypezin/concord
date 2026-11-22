@@ -12,7 +12,6 @@ import {
   RefreshCw,
   Shield,
   SlidersHorizontal,
-  Sparkles,
   User,
   Volume2,
   X,
@@ -25,14 +24,14 @@ import {
 import { Avatar } from './Avatar.js';
 
 const AVATAR_PALETTE = [
-  '#6366f1',
-  '#8b5cf6',
-  '#ec4899',
-  '#f43f5e',
-  '#f59e0b',
-  '#10b981',
-  '#06b6d4',
+  '#5865f2',
   '#3b82f6',
+  '#06b6d4',
+  '#10b981',
+  '#f59e0b',
+  '#f43f5e',
+  '#ec4899',
+  '#71717a',
 ];
 
 interface VoiceSettingsModalProps {
@@ -73,7 +72,7 @@ function ToggleSwitch({ checked, onToggle }: ToggleSwitchProps) {
       onClick={onToggle}
       className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border transition ${
         checked
-          ? 'border-indigo-400/50 bg-indigo-600'
+          ? 'border-transparent bg-[#23a55a]'
           : 'border-white/10 bg-white/10'
       }`}
     >
@@ -111,7 +110,7 @@ export function VoiceSettingsModal({
   const loopbackGainRef = useRef<GainNode | null>(null);
 
   const [tailscaleStatus, setTailscaleStatus] = useState<TailscaleStatus | null>(null);
-  const [appVersion, setAppVersion] = useState<string>('0.3.1');
+  const [appVersion, setAppVersion] = useState<string>('0.4.0');
   const [updaterStatus, setUpdaterStatus] = useState<UpdaterStatus | null>(null);
   const [checkingUpdates, setCheckingUpdates] = useState(false);
 
@@ -127,15 +126,23 @@ export function VoiceSettingsModal({
 
   useEffect(() => {
     void refreshDevices();
+    const onDeviceChange = () => {
+      void refreshDevices();
+    };
+    navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
 
+    let unsubUpdater: (() => void) | undefined;
     if (window.concordAPI) {
       void window.concordAPI.getTailscaleStatus().then(setTailscaleStatus).catch(() => undefined);
       void window.concordAPI.getVersion().then(setAppVersion).catch(() => undefined);
       void window.concordAPI.getUpdaterStatus().then(setUpdaterStatus).catch(() => undefined);
-      const unsub = window.concordAPI.onUpdaterStatus(setUpdaterStatus);
-      return () => unsub();
+      unsubUpdater = window.concordAPI.onUpdaterStatus(setUpdaterStatus);
     }
-    return undefined;
+
+    return () => {
+      navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
+      unsubUpdater?.();
+    };
   }, []);
 
   useEffect(() => {
@@ -297,44 +304,35 @@ export function VoiceSettingsModal({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
       onClick={onClose}
     >
       <div
-        className="concord-glass animate-modal-in relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#131724]/98"
+        className="concord-panel animate-modal-in flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#16161b]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/45 to-transparent" />
-
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-indigo-400/25 bg-indigo-500/15 text-indigo-300">
-              <SlidersHorizontal className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold tracking-tight text-white">
-                Perfil, Voz e Atalhos
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Personalize seu perfil e ajuste microfone, RNNoise IA e dispositivos
-              </p>
-            </div>
+            <SlidersHorizontal className="h-4 w-4 text-zinc-300" />
+            <h2 className="text-sm font-semibold text-white">
+              Configurações
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.07] hover:text-white"
+            className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {/* Meu Perfil */}
-          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4">
-            <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              <User className="h-3.5 w-3.5 text-indigo-400" />
-              Meu Perfil
+          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+            <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              <User className="h-3.5 w-3.5" />
+              Perfil
             </div>
 
             <div className="flex items-center gap-3">
@@ -342,7 +340,7 @@ export function VoiceSettingsModal({
                 displayName={displayName || currentUser.displayName}
                 color={avatarColor}
                 size="lg"
-                ringBg="border-[#0a0d14]"
+                ringBg="border-[#101013]"
               />
               <div className="flex flex-1 gap-2">
                 <input
@@ -350,14 +348,14 @@ export function VoiceSettingsModal({
                   maxLength={32}
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
-                  placeholder="Nome exibido no chat"
-                  className="flex-1 rounded-xl border border-white/[0.08] bg-[#131724] px-3 py-2 text-xs text-slate-100 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  placeholder="Nome exibido"
+                  className="flex-1 rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 text-xs text-zinc-100 transition focus:border-white/[0.22] focus:outline-none"
                 />
                 <button
                   type="button"
                   onClick={() => void handleSaveProfile()}
                   disabled={savingProfile}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-3.5 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-500/20 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#5865f2] px-3.5 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
                 >
                   {savingProfile ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -370,7 +368,7 @@ export function VoiceSettingsModal({
             </div>
 
             <div className="flex items-center gap-2.5 pt-0.5">
-              <span className="text-[11px] text-slate-400">Cor do avatar:</span>
+              <span className="text-[11px] text-zinc-400">Cor do avatar:</span>
               <div className="flex flex-wrap gap-2">
                 {AVATAR_PALETTE.map((color) => (
                   <button
@@ -379,8 +377,8 @@ export function VoiceSettingsModal({
                     onClick={() => setAvatarColor(color)}
                     className={`h-5 w-5 rounded-full transition ${
                       avatarColor === color
-                        ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#0a0d14]'
-                        : 'opacity-75 hover:scale-105 hover:opacity-100'
+                        ? 'scale-110 ring-2 ring-white ring-offset-2 ring-offset-[#101013]'
+                        : 'opacity-75 hover:opacity-100'
                     }`}
                     style={{ backgroundColor: color }}
                   />
@@ -396,14 +394,14 @@ export function VoiceSettingsModal({
           </div>
 
           {/* Dispositivos de Áudio */}
-          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
               Dispositivos de Áudio
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-xs text-slate-300">
-                <Mic className="h-3.5 w-3.5 text-slate-400" />
+              <label className="mb-1 flex items-center gap-1.5 text-xs text-zinc-300">
+                <Mic className="h-3.5 w-3.5 text-zinc-400" />
                 Microfone (Entrada)
               </label>
               <select
@@ -411,7 +409,7 @@ export function VoiceSettingsModal({
                 onChange={(e) =>
                   void onUpdateSettings({ ...settings, inputDeviceId: e.target.value })
                 }
-                className="w-full rounded-xl border border-white/[0.08] bg-[#131724] px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none"
+                className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-2.5 py-2 text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
               >
                 <option value="default">Padrão do Windows</option>
                 {inputs.map((dev, i) => (
@@ -423,8 +421,8 @@ export function VoiceSettingsModal({
             </div>
 
             <div>
-              <label className="mb-1 flex items-center gap-1.5 text-xs text-slate-300">
-                <Volume2 className="h-3.5 w-3.5 text-slate-400" />
+              <label className="mb-1 flex items-center gap-1.5 text-xs text-zinc-300">
+                <Volume2 className="h-3.5 w-3.5 text-zinc-400" />
                 Fone / Caixa de Som (Saída)
               </label>
               <select
@@ -432,7 +430,7 @@ export function VoiceSettingsModal({
                 onChange={(e) =>
                   void onUpdateSettings({ ...settings, outputDeviceId: e.target.value })
                 }
-                className="w-full rounded-xl border border-white/[0.08] bg-[#131724] px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none"
+                className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-2.5 py-2 text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
               >
                 <option value="default">Padrão do Windows</option>
                 {outputs.map((dev, i) => (
@@ -445,14 +443,14 @@ export function VoiceSettingsModal({
 
             {/* Medidor de Microfone */}
             <div className="space-y-2.5 pt-1">
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
                   onClick={() => void toggleMicTest()}
-                  className={`rounded-xl px-3.5 py-1.5 text-xs font-semibold transition ${
+                  className={`rounded-lg border px-3 py-1.5 text-xs font-medium transition ${
                     testingMic
-                      ? 'border border-rose-500/30 bg-rose-500/20 text-rose-200 hover:bg-rose-500/30'
-                      : 'border border-white/[0.09] bg-white/[0.07] text-slate-200 hover:bg-white/[0.13]'
+                      ? 'border-rose-500/30 bg-rose-500/15 text-rose-200 hover:bg-rose-500/25'
+                      : 'border-white/[0.08] bg-[#202027] text-zinc-200 hover:bg-[#292932]'
                   }`}
                 >
                   {testingMic ? 'Parar Teste' : 'Testar Microfone'}
@@ -462,19 +460,19 @@ export function VoiceSettingsModal({
                   type="button"
                   onClick={() => setHearSelf((prev) => !prev)}
                   title="Ouvir o retorno da sua própria voz durante o teste"
-                  className={`inline-flex items-center gap-1.5 rounded-xl border px-2.5 py-1.5 text-[11px] font-medium transition ${
+                  className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-[11px] font-medium transition ${
                     hearSelf
-                      ? 'border-indigo-400/40 bg-indigo-500/20 text-indigo-200'
-                      : 'border-white/[0.07] bg-[#131724] text-slate-400 hover:text-slate-200'
+                      ? 'border-white/[0.18] bg-[#26262f] text-white'
+                      : 'border-white/[0.07] bg-[#16161b] text-zinc-400 hover:text-zinc-200'
                   }`}
                 >
                   <Headphones className="h-3.5 w-3.5" />
                   Ouvir retorno
                 </button>
 
-                <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#131724] ring-1 ring-inset ring-white/[0.06]">
+                <div className="h-2 flex-1 overflow-hidden rounded-full bg-[#0c0c0e]">
                   <div
-                    className="h-full rounded-full bg-gradient-to-r from-emerald-400 via-indigo-400 to-violet-400 transition-all duration-75"
+                    className="h-full rounded-full bg-[#23a55a] transition-all duration-75"
                     style={{ width: `${micLevel}%` }}
                   />
                 </div>
@@ -490,26 +488,18 @@ export function VoiceSettingsModal({
           </div>
 
           {/* Processamento de Voz */}
-          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4">
-            <div className="flex items-center justify-between">
-              <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                Qualidade de Voz (Opus 64 kbps)
-              </div>
-              {settings.rnnoiseEnabled && (
-                <span className="inline-flex items-center gap-1 rounded-md border border-indigo-400/25 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-200">
-                  <Sparkles className="h-3 w-3 text-indigo-300" />
-                  RNNoise 48kHz Ativo
-                </span>
-              )}
+          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              Processamento de Voz
             </div>
 
             <div className="flex items-center justify-between gap-3 py-0.5">
               <div>
-                <div className="text-xs font-medium text-slate-200">
-                  RNNoise — Supressão de ruído por IA
+                <div className="text-xs font-medium text-zinc-200">
+                  Supressão de ruído (RNNoise)
                 </div>
-                <div className="text-[11px] text-slate-400">
-                  Remove som de teclado mecânico, ventilador e ruído de fundo
+                <div className="text-[11px] text-zinc-500">
+                  Reduz ruídos de teclado, ventilador e ambiente
                 </div>
               </div>
               <ToggleSwitch
@@ -520,8 +510,8 @@ export function VoiceSettingsModal({
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/[0.05] pt-2.5">
-              <div className="text-xs font-medium text-slate-200">Cancelamento de Eco</div>
+            <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2.5">
+              <div className="text-xs font-medium text-zinc-200">Cancelamento de Eco</div>
               <ToggleSwitch
                 checked={settings.echoCancellation}
                 onToggle={() =>
@@ -533,8 +523,8 @@ export function VoiceSettingsModal({
               />
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-white/[0.05] pt-2.5">
-              <div className="text-xs font-medium text-slate-200">
+            <div className="flex items-center justify-between gap-3 border-t border-white/[0.06] pt-2.5">
+              <div className="text-xs font-medium text-zinc-200">
                 Controle Automático de Ganho (AGC)
               </div>
               <ToggleSwitch
@@ -550,11 +540,11 @@ export function VoiceSettingsModal({
           </div>
 
           {/* Atalhos Globais */}
-          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4">
+          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-slate-400">
-                <Keyboard className="h-3.5 w-3.5 text-indigo-400" />
-                Atalhos Globais (funcionam em jogos)
+              <div className="flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+                <Keyboard className="h-3.5 w-3.5" />
+                Atalhos Globais (em jogos)
               </div>
               <button
                 type="button"
@@ -564,7 +554,7 @@ export function VoiceSettingsModal({
                     shortcuts: { ...DEFAULT_VOICE_SETTINGS.shortcuts },
                   })
                 }
-                className="text-[11px] font-medium text-indigo-400 hover:underline"
+                className="text-[11px] font-medium text-zinc-300 hover:underline"
               >
                 Restaurar padrão
               </button>
@@ -572,7 +562,7 @@ export function VoiceSettingsModal({
 
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-[11px] text-slate-400">
+                <label className="mb-1 block text-[11px] text-zinc-400">
                   Mutar / Desmutar Mic
                 </label>
                 <input
@@ -597,12 +587,12 @@ export function VoiceSettingsModal({
                     }
                   }}
                   title="Clique e pressione uma combinação (ex: Ctrl+Shift+M)"
-                  className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-[#131724] px-3 py-2 font-mono text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
                 />
               </div>
 
               <div>
-                <label className="mb-1 block text-[11px] text-slate-400">
+                <label className="mb-1 block text-[11px] text-zinc-400">
                   Ensurdecer (Deafen)
                 </label>
                 <input
@@ -627,19 +617,19 @@ export function VoiceSettingsModal({
                     }
                   }}
                   title="Clique e pressione uma combinação (ex: Ctrl+Shift+D)"
-                  className="w-full cursor-pointer rounded-xl border border-white/[0.08] bg-[#131724] px-3 py-2 font-mono text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                  className="w-full cursor-pointer rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
                 />
               </div>
             </div>
-            <p className="text-[10px] text-slate-500">
+            <p className="text-[10px] text-zinc-500">
               Clique no campo e pressione uma combinação com Ctrl, Alt ou Shift + tecla.
             </p>
             {shortcutStatus &&
               (!shortcutStatus.toggleMute || !shortcutStatus.toggleDeafen) && (
-                <div className="flex items-center gap-1.5 rounded-xl border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
+                <div className="flex items-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-[11px] text-amber-200">
                   <AlertCircle className="h-3.5 w-3.5 shrink-0 text-amber-400" />
                   <span>
-                    Atalho em conflito com outro app no Windows (
+                    Atalho em conflito com outro programa (
                     {!shortcutStatus.toggleMute ? 'Mute' : ''}
                     {!shortcutStatus.toggleMute && !shortcutStatus.toggleDeafen ? ' e ' : ''}
                     {!shortcutStatus.toggleDeafen ? 'Ensurdecer' : ''}
@@ -650,33 +640,33 @@ export function VoiceSettingsModal({
           </div>
 
           {/* Tailscale e Atualizações */}
-          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4 text-xs">
+          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4 text-xs">
             <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 text-slate-300">
-                <Shield className="h-4 w-4 text-indigo-400" />
-                <span>Rede Privada Tailscale</span>
+              <div className="flex items-center gap-2 text-zinc-300">
+                <Shield className="h-4 w-4 text-zinc-400" />
+                <span>Rede Tailscale</span>
               </div>
               {tailscaleStatus ? (
                 tailscaleStatus.connected ? (
-                  <span className="inline-flex items-center gap-1 font-medium text-emerald-300">
-                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
+                  <span className="inline-flex items-center gap-1 font-medium text-emerald-400">
+                    <CheckCircle2 className="h-3.5 w-3.5" />
                     Conectado ({tailscaleStatus.selfIp})
                   </span>
                 ) : tailscaleStatus.installed ? (
                   <span className="text-amber-300">Instalado (desconectado)</span>
                 ) : (
-                  <span className="text-slate-400">Não instalado</span>
+                  <span className="text-zinc-500">Não instalado</span>
                 )
               ) : (
-                <span className="text-slate-500">Verificando...</span>
+                <span className="text-zinc-500">Verificando...</span>
               )}
             </div>
 
             <div className="flex items-center justify-between border-t border-white/[0.06] pt-3">
               <div>
-                <div className="font-semibold text-slate-200">Concord v{appVersion}</div>
+                <div className="font-semibold text-zinc-200">Concord v{appVersion}</div>
                 {updaterStatus?.message && (
-                  <div className="text-[11px] text-slate-400">{updaterStatus.message}</div>
+                  <div className="text-[11px] text-zinc-400">{updaterStatus.message}</div>
                 )}
               </div>
 
@@ -684,7 +674,7 @@ export function VoiceSettingsModal({
                 <button
                   type="button"
                   onClick={() => void window.concordAPI?.installUpdate()}
-                  className="inline-flex items-center gap-1.5 rounded-xl bg-gradient-to-r from-emerald-600 to-teal-600 px-3 py-1.5 text-[11px] font-semibold text-white shadow-md shadow-emerald-500/25 transition hover:from-emerald-500 hover:to-teal-500"
+                  className="inline-flex items-center gap-1.5 rounded-lg bg-[#23a55a] px-3 py-1.5 text-[11px] font-semibold text-white transition hover:bg-[#1e8e4d]"
                 >
                   <Download className="h-3.5 w-3.5" />
                   Reiniciar e Instalar v{updaterStatus.version}
@@ -694,7 +684,7 @@ export function VoiceSettingsModal({
                   type="button"
                   onClick={() => void handleCheckUpdates()}
                   disabled={checkingUpdates}
-                  className="inline-flex items-center gap-1.5 rounded-xl border border-white/[0.09] bg-white/[0.05] px-3 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-white/[0.1] disabled:opacity-50"
+                  className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#202027] px-3 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:bg-[#292932] disabled:opacity-50"
                 >
                   {checkingUpdates ? (
                     <Loader2 className="h-3.5 w-3.5 animate-spin" />

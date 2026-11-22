@@ -165,17 +165,24 @@ export function useVoiceRoom(options: {
     (track: LocalAudioTrack) => {
       stopLocalSpeechMonitor();
       try {
-        const mediaTrack = track.mediaStreamTrack;
-        if (!mediaTrack || mediaTrack.readyState === 'ended') return;
+        const rawMediaTrack =
+          (track as unknown as { _mediaStreamTrack?: MediaStreamTrack })._mediaStreamTrack ??
+          track.mediaStreamTrack;
+        if (!rawMediaTrack || rawMediaTrack.readyState === 'ended') return;
 
         const ctx = new AudioContext({ latencyHint: 'interactive' });
         if (ctx.state === 'suspended') {
           void ctx.resume().catch(() => undefined);
         }
-        const source = ctx.createMediaStreamSource(new MediaStream([mediaTrack]));
+        const source = ctx.createMediaStreamSource(new MediaStream([rawMediaTrack]));
         const analyser = ctx.createAnalyser();
         analyser.fftSize = 256;
+        const zeroGain = ctx.createGain();
+        zeroGain.gain.value = 0;
+
         source.connect(analyser);
+        analyser.connect(zeroGain);
+        zeroGain.connect(ctx.destination);
 
         const buf = new Uint8Array(analyser.frequencyBinCount);
         let holdFrames = 0;
@@ -193,7 +200,7 @@ export function useVoiceRoom(options: {
             sum += norm * norm;
           }
           const rms = Math.sqrt(sum / buf.length);
-          if (rms > 0.016) {
+          if (rms > 0.015) {
             holdFrames = 4;
             setLocalSpeaking((prev) => (prev ? prev : true));
           } else if (holdFrames > 0) {
@@ -207,6 +214,8 @@ export function useVoiceRoom(options: {
           clearInterval(timer);
           try {
             source.disconnect();
+            analyser.disconnect();
+            zeroGain.disconnect();
           } catch {
             // ignore
           }
@@ -425,6 +434,9 @@ export function useVoiceRoom(options: {
               '[Concord] Microfone selecionado indisponível, usando microfone padrão do Windows:',
               err,
             );
+            const fallbackSettings = { ...settingsRef.current, inputDeviceId: 'default' };
+            settingsRef.current = fallbackSettings;
+            setSettings(fallbackSettings);
             return createLocalAudioTrack({
               deviceId: undefined,
               echoCancellation: cfg.echoCancellation,
@@ -806,25 +818,38 @@ export function useVoiceRoom(options: {
         });
       }
 
-      const streamConstraints = {
-        video: {
-          width: { ideal: preset.width, max: preset.width },
-          height: { ideal: preset.height, max: preset.height },
-          frameRate: { ideal: opts.fps, max: opts.fps },
-        },
-        audio: opts.includeSystemAudio
-          ? ({
-              restrictOwnAudio: true,
-              echoCancellation: false,
-              noiseSuppression: false,
-              autoGainControl: false,
-            } as MediaTrackConstraints)
-          : false,
+      const videoConstraints: MediaTrackConstraints = {
+        width: { ideal: preset.width },
+        height: { ideal: preset.height },
+        frameRate: { ideal: opts.fps, max: opts.fps },
       };
+
+      const audioConstraints = opts.includeSystemAudio
+        ? ({
+            restrictOwnAudio: true,
+            echoCancellation: false,
+            noiseSuppression: false,
+            autoGainControl: false,
+          } as MediaTrackConstraints)
+        : false;
 
       let stream: MediaStream | null = null;
       try {
-        stream = await navigator.mediaDevices.getDisplayMedia(streamConstraints);
+        try {
+          stream = await navigator.mediaDevices.getDisplayMedia({
+            video: videoConstraints,
+            audio: audioConstraints,
+          });
+        } catch (captureErr) {
+          if (opts.includeSystemAudio) {
+            stream = await navigator.mediaDevices.getDisplayMedia({
+              video: videoConstraints,
+              audio: false,
+            });
+          } else {
+            throw captureErr;
+          }
+        }
 
         const rawVideo = stream.getVideoTracks()[0];
         if (!rawVideo) {
@@ -854,10 +879,9 @@ export function useVoiceRoom(options: {
 
         await room.localParticipant.publishTrack(localVideo, {
           source: Track.Source.ScreenShare,
-          // Camada única em alta qualidade: evita que o receptor caia em simulcast 720p@15fps.
           simulcast: false,
-          // H.264 usa codificação por hardware (NVENC/QuickSync/AMF) no Windows para 60 FPS estáveis.
           videoCodec: 'h264',
+          backupCodec: { codec: 'vp8' },
           screenShareEncoding: {
             maxBitrate: targetBitrate,
             maxFramerate: opts.fps,

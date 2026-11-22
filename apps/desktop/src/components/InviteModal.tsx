@@ -134,63 +134,54 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4 backdrop-blur-md"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 p-4"
       onClick={onClose}
     >
       <div
-        className="concord-glass animate-modal-in relative flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-2xl border border-white/[0.09] bg-[#131724]/98"
+        className="concord-panel animate-modal-in flex max-h-[88vh] w-full max-w-lg flex-col overflow-hidden rounded-xl border border-white/[0.09] bg-[#16161b]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="pointer-events-none absolute inset-x-0 top-0 h-px bg-gradient-to-r from-transparent via-indigo-400/45 to-transparent" />
-
-        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-4">
+        <div className="flex items-center justify-between border-b border-white/[0.07] px-5 py-3.5">
           <div className="flex items-center gap-2.5">
-            <div className="flex h-8 w-8 items-center justify-center rounded-xl border border-indigo-400/25 bg-indigo-500/15 text-indigo-300">
-              <KeyRound className="h-4 w-4" />
-            </div>
-            <div>
-              <h2 className="text-base font-semibold tracking-tight text-white">
-                Convites Privados
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Gere códigos para seus amigos entrarem via Tailscale
-              </p>
-            </div>
+            <KeyRound className="h-4 w-4 text-zinc-300" />
+            <h2 className="text-sm font-semibold text-white">
+              Convites do Servidor
+            </h2>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="rounded-lg p-1.5 text-slate-400 transition hover:bg-white/[0.07] hover:text-white"
+            className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-white/[0.07] hover:text-white"
           >
             <X className="h-4 w-4" />
           </button>
         </div>
 
-        <div className="flex-1 space-y-5 overflow-y-auto p-5">
+        <div className="flex-1 space-y-4 overflow-y-auto p-5">
           {/* Gerar novo convite */}
-          <div className="space-y-3 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="space-y-3 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
               Gerar Novo Convite
             </div>
             <div className="grid grid-cols-2 gap-3">
               <div>
-                <label className="mb-1 block text-xs text-slate-400">Máximo de usos</label>
+                <label className="mb-1 block text-xs text-zinc-400">Máximo de usos</label>
                 <select
                   value={maxUses}
                   onChange={(e) => setMaxUses(Number(e.target.value))}
-                  className="w-full rounded-xl border border-white/[0.08] bg-[#131724] px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none"
+                  className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-2.5 py-2 text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
                 >
-                  <option value={1}>1 amigo</option>
-                  <option value={2}>2 amigos</option>
-                  <option value={3}>3 amigos</option>
+                  <option value={1}>1 uso</option>
+                  <option value={2}>2 usos</option>
+                  <option value={3}>3 usos</option>
                 </select>
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-400">Validade</label>
+                <label className="mb-1 block text-xs text-zinc-400">Validade</label>
                 <select
                   value={expiryOption}
                   onChange={(e) => setExpiryOption(e.target.value as '24h' | '7d' | 'never')}
-                  className="w-full rounded-xl border border-white/[0.08] bg-[#131724] px-2.5 py-2 text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none"
+                  className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-2.5 py-2 text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
                 >
                   <option value="24h">24 horas</option>
                   <option value="7d">7 dias</option>
@@ -203,7 +194,7 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
               type="button"
               onClick={() => void handleCreate()}
               disabled={creating}
-              className="flex w-full items-center justify-center gap-1.5 rounded-xl bg-gradient-to-r from-indigo-600 to-violet-600 px-4 py-2 text-xs font-semibold text-white shadow-md shadow-indigo-500/20 transition hover:from-indigo-500 hover:to-violet-500 disabled:opacity-50"
+              className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-[#5865f2] px-4 py-2 text-xs font-semibold text-white transition hover:bg-[#4752c4] disabled:opacity-50"
             >
               {creating ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Plus className="h-3.5 w-3.5" />}
               Criar Código de Convite
@@ -211,14 +202,14 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
           </div>
 
           {/* Parâmetros opcionais para convite unificado */}
-          <div className="space-y-2.5 rounded-xl border border-white/[0.07] bg-[#0a0d14]/65 p-4">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
+          <div className="space-y-2.5 rounded-lg border border-white/[0.07] bg-[#101013] p-4">
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
               Opções do Convite Unificado (CONCORD-...)
             </div>
             <div>
               <div className="mb-1 flex items-center justify-between gap-2">
-                <label className="block text-[11px] text-slate-400">
-                  Endereço do servidor para os amigos (IP Tailscale)
+                <label className="block text-[11px] text-zinc-400">
+                  Endereço do servidor para os convidados (IP Tailscale)
                 </label>
                 {tailscaleIp && (
                   <button
@@ -226,7 +217,7 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
                     onClick={() =>
                       setPublicServerUrl(buildTailscaleServerUrl(publicServerUrl, tailscaleIp))
                     }
-                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-indigo-400/25 bg-indigo-500/15 px-2 py-0.5 text-[10px] font-semibold text-indigo-200 transition hover:bg-indigo-500/25"
+                    className="inline-flex shrink-0 items-center gap-1 rounded border border-white/[0.08] bg-[#202027] px-2 py-0.5 text-[10px] font-medium text-zinc-200 transition hover:bg-[#292932]"
                   >
                     <Shield className="h-3 w-3" />
                     Usar meu IP Tailscale
@@ -238,7 +229,7 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
                 value={publicServerUrl}
                 onChange={(e) => setPublicServerUrl(e.target.value)}
                 placeholder="http://100.x.x.x:3000"
-                className="w-full rounded-xl border border-white/[0.08] bg-[#131724] px-3 py-2 font-mono text-xs text-slate-200 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 transition focus:border-white/[0.22] focus:outline-none"
               />
               {showLocalUrlWarning && (
                 <div className="mt-2 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2.5 py-2 text-[11px] text-amber-200">
@@ -250,37 +241,37 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
               )}
             </div>
             <div>
-              <label className="mb-1 block text-[11px] text-slate-400">
-                Tailscale Auth Key (conecta seu amigo à rede privada sem conta)
+              <label className="mb-1 block text-[11px] text-zinc-400">
+                Tailscale Auth Key (opcional)
               </label>
               <input
                 type="password"
                 value={tailscaleAuthKey}
                 onChange={(e) => setTailscaleAuthKey(e.target.value)}
                 placeholder="tskey-auth-..."
-                className="w-full rounded-xl border border-white/[0.08] bg-[#131724] px-3 py-2 font-mono text-xs text-slate-200 placeholder:font-sans placeholder:text-slate-600 transition focus:border-indigo-500/70 focus:outline-none focus:ring-2 focus:ring-indigo-500/20"
+                className="w-full rounded-lg border border-white/[0.08] bg-[#0c0c0e] px-3 py-2 font-mono text-xs text-zinc-200 placeholder:font-sans placeholder:text-zinc-600 transition focus:border-white/[0.22] focus:outline-none"
               />
             </div>
           </div>
 
           {error && (
-            <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
+            <div className="rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs text-rose-200">
               {error}
             </div>
           )}
 
           {/* Lista de convites */}
           <div className="space-y-2">
-            <div className="text-[11px] font-bold uppercase tracking-wider text-slate-400">
-              Convites Criados
+            <div className="text-[11px] font-semibold uppercase tracking-wider text-zinc-400">
+              Convites Ativos
             </div>
             {loading ? (
-              <div className="flex items-center justify-center py-6 text-slate-400">
-                <Loader2 className="h-5 w-5 animate-spin text-indigo-400" />
+              <div className="flex items-center justify-center py-6 text-zinc-400">
+                <Loader2 className="h-5 w-5 animate-spin" />
               </div>
             ) : invites.length === 0 ? (
-              <div className="rounded-xl border border-dashed border-white/10 py-6 text-center text-xs text-slate-500">
-                Nenhum convite ativo ainda.
+              <div className="rounded-lg border border-dashed border-white/10 py-6 text-center text-xs text-zinc-500">
+                Nenhum convite ativo.
               </div>
             ) : (
               invites.map((inv) => {
@@ -295,18 +286,18 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
                 return (
                   <div
                     key={inv.code}
-                    className="flex flex-col gap-2.5 rounded-xl border border-white/[0.07] bg-[#0a0d14]/85 p-3.5"
+                    className="flex flex-col gap-2.5 rounded-lg border border-white/[0.07] bg-[#101013] p-3.5"
                   >
                     <div className="flex items-center justify-between gap-2">
                       <div>
                         <span className="font-mono text-sm font-bold tracking-wider text-white">
                           {inv.code}
                         </span>
-                        <span className="ml-2 text-xs text-slate-400">
+                        <span className="ml-2 text-xs text-zinc-400">
                           Usos: {inv.uses}/{inv.maxUses}
                         </span>
                         {(expired || exhausted) && (
-                          <span className="ml-2 rounded-md bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">
+                          <span className="ml-2 rounded bg-rose-500/15 px-1.5 py-0.5 text-[10px] font-semibold text-rose-300">
                             {exhausted ? 'Esgotado' : 'Expirado'}
                           </span>
                         )}
@@ -315,7 +306,7 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
                         type="button"
                         onClick={() => void handleRevoke(inv.code)}
                         title="Revogar convite"
-                        className="rounded-lg p-1.5 text-slate-400 transition hover:bg-rose-500/15 hover:text-rose-300"
+                        className="rounded-lg p-1.5 text-zinc-400 transition hover:bg-rose-500/15 hover:text-rose-300"
                       >
                         <Trash2 className="h-3.5 w-3.5" />
                       </button>
@@ -325,7 +316,7 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
                       <button
                         type="button"
                         onClick={() => void copyText(`code-${inv.code}`, inv.code)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.09] bg-white/[0.05] px-2.5 py-1.5 text-[11px] font-medium text-slate-200 transition hover:bg-white/[0.1]"
+                        className="inline-flex items-center gap-1.5 rounded-lg border border-white/[0.08] bg-[#1c1c22] px-2.5 py-1.5 text-[11px] font-medium text-zinc-200 transition hover:bg-[#25252d]"
                       >
                         {copiedId === `code-${inv.code}` ? (
                           <Check className="h-3 w-3 text-emerald-400" />
@@ -338,10 +329,10 @@ export function InviteModal({ api, currentServerUrl, onClose }: InviteModalProps
                       <button
                         type="button"
                         onClick={() => void copyText(`uni-${inv.code}`, unified)}
-                        className="inline-flex items-center gap-1.5 rounded-lg border border-indigo-400/30 bg-indigo-500/15 px-2.5 py-1.5 text-[11px] font-semibold text-indigo-200 transition hover:bg-indigo-500/25"
+                        className="inline-flex items-center gap-1.5 rounded-lg bg-[#5865f2] px-2.5 py-1.5 text-[11px] font-semibold text-white transition hover:bg-[#4752c4]"
                       >
                         {copiedId === `uni-${inv.code}` ? (
-                          <Check className="h-3 w-3 text-emerald-400" />
+                          <Check className="h-3 w-3 text-white" />
                         ) : (
                           <Copy className="h-3 w-3" />
                         )}
